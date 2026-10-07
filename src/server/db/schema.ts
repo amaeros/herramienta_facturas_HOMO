@@ -165,7 +165,7 @@ export const cambiosContrato = pgTable(
     campo: text('campo').notNull(),
     antes: text('antes').notNull().default(''),
     despues: text('despues').notNull().default(''),
-    /** true si la contratista guardó un valor total distinto al que da su honorario por la vigencia. */
+    /** true si la contratista guardó un valor total distinto al esperado, o cambió su honorario o su riesgo ARL. */
     alerta: boolean('alerta').notNull().default(false),
     creado: timestamp('creado', { withTimezone: true }).notNull().defaultNow(),
   },

@@ -25,7 +25,7 @@ export const ETIQUETAS_CAMPO: Record<string, string> = {
   revisoCargo: 'Revisó (cargo)',
   numeroContrato: 'N.º de contrato',
   objeto: 'Objeto del contrato',
-  honorario: 'Honorario',
+  honorario: 'Honorario mensual',
   valorTotal: 'Valor total del contrato',
   riesgo: 'Riesgo ARL',
   riesgoNuevo: 'Riesgo ARL nuevo',
@@ -44,6 +44,7 @@ export const ETIQUETAS_CAMPO: Record<string, string> = {
   correo: 'Correo',
   ciudad: 'Ciudad',
   cargo: 'Cargo',
+  linea: 'Equipo o línea',
 };
 
 /** Los campos que la contratista puede editar de su propio contrato, en el orden de la pantalla. */
@@ -53,10 +54,14 @@ export const CAMPOS_CONTRATISTA = [
   'ciudad',
   'correo',
   'cargo',
+  'linea',
+  'numeroContrato',
   'objeto',
   'inicio',
   'fin',
+  'honorario',
   'valorTotal',
+  'riesgo',
   'revisoNombre',
   'revisoCargo',
 ] as const;
@@ -132,7 +137,7 @@ export type CambioAdmin = {
   etiqueta: string;
   antes: string;
   despues: string;
-  /** La contratista guardó un valor total distinto al que da su honorario por la vigencia. */
+  /** Para mirar con cuidado: valor total distinto al esperado, o un cambio de honorario o de riesgo ARL de la contratista. */
   alerta: boolean;
   creado: Date;
 };

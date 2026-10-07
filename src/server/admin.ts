@@ -19,6 +19,8 @@ import {
   monto,
   mesValido,
   normTxt,
+  RIESGOS,
+  riesgoRomano,
 } from './entrada';
 import { ErrorAmable, ErrorValidacion, MENSAJE_GENERICO } from './errores';
 import { MAX_BYTES_IMPORTAR, parsearExcelControl } from './importar';
@@ -26,7 +28,6 @@ import { cargarParametros, mesActual, recalcularAcumulados, type Deps } from './
 
 const MSG_NO_TRABAJADORA = 'No encontramos a esa trabajadora.';
 const MSG_NO_CARGA = 'No encontramos esa cuenta de cobro.';
-const RIESGOS = ['I', 'II', 'III', 'IV', 'V'];
 
 export type ContratoAdmin = ContratoFila & { cargas: number };
 
@@ -66,12 +67,6 @@ function vacio(v: unknown): boolean {
 function soloDigitos(v: unknown): string {
   const s = String(v ?? '').replace(/[\s.]/g, '');
   return /^\d*$/.test(s) ? s : '';
-}
-
-function riesgoRomano(v: unknown): string | null {
-  const s = String(v ?? '').trim().toUpperCase();
-  if (/^[1-5]$/.test(s)) return RIESGOS[Number(s) - 1];
-  return RIESGOS.includes(s) ? s : null;
 }
 
 /**

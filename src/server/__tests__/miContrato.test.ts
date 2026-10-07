@@ -10,6 +10,7 @@ import { cambiosContrato, cargas, contratos } from '../db/schema';
 import { ErrorAmable, ErrorValidacion } from '../errores';
 import { contratoIdDeSesion, exigirAdmin } from '../http';
 import { guardarMiContrato, leerMiContrato } from '../miContrato';
+import { faltanDelPerfil } from '../perfil';
 import { login, resumenDeSesion, snapshotDeContrato, type Deps } from '../servicios';
 import { AHORA, BlobFalso, crearBase, crearCarga, crearContratista, crearDeps, vaciar } from './helpers';
 
@@ -65,20 +66,24 @@ describe('leerMiContrato', () => {
       ciudad: 'Medellín',
       correo: 'prueba@correo.test',
       cargo: 'Profesional de prueba',
+      linea: '',
+      numeroContrato: '2026CPS999',
       objeto: 'Objeto ficticio de prueba.',
       inicio: '2026-01-01',
       fin: '2026-09-30',
+      honorario: 4009000,
       valorTotal: 36081000,
+      riesgo: 'III',
       revisoNombre: 'Revisora de Prueba',
       revisoCargo: 'Apoyo Técnico',
       valorTotalEsperado: 36081000, // 9 meses completos x 4.009.000
     });
   });
 
-  it('no devuelve nada que no pueda editar (cédula, honorario, riesgo, n.º de contrato...)', async () => {
+  it('no devuelve nada que no pueda editar (nombre, cédula, riesgo nuevo, activo...)', async () => {
     const id = await crearContratista(db);
     const d = await leerMiContrato(deps, id);
-    for (const k of ['nombre', 'cedula', 'numeroContrato', 'honorario', 'riesgo', 'riesgoNuevo', 'riesgoDesde', 'activo', 'linea', 'id']) {
+    for (const k of ['nombre', 'cedula', 'riesgoNuevo', 'riesgoDesde', 'activo', 'estado', 'id']) {
       expect(d).not.toHaveProperty(k);
     }
   });
@@ -228,9 +233,16 @@ describe('la contratista edita su contrato', () => {
       valorTotal: '40.090.000',
       revisoNombre: 'Otra Persona',
       revisoCargo: 'Líder',
+      linea: 'Otro equipo',
+      numeroContrato: '2026CPS111',
+      honorario: '$ 4.500.000',
+      riesgo: 'II',
     });
     expect((await filasCambios()).map((x) => x.campo).sort()).toEqual(
-      ['cargo', 'ciudad', 'correo', 'direccion', 'fin', 'inicio', 'objeto', 'revisoCargo', 'revisoNombre', 'telefono', 'valorTotal'],
+      [
+        'cargo', 'ciudad', 'correo', 'direccion', 'fin', 'honorario', 'inicio', 'linea', 'numeroContrato', 'objeto', 'revisoCargo',
+        'revisoNombre', 'riesgo', 'telefono', 'valorTotal',
+      ],
     );
   });
 });
@@ -360,27 +372,25 @@ describe('validaciones', () => {
   it('un cuerpo sin ninguno de los campos editables no es una solicitud válida', async () => {
     const id = await crearContratista(db);
     expect((await amable(guardarMiContrato(deps, id, {}))).message).toMatch(/nada que guardar/);
-    expect((await amable(guardarMiContrato(deps, id, { honorario: 1 }))).message).toMatch(/nada que guardar/);
+    expect((await amable(guardarMiContrato(deps, id, { nombre: 'X', cedula: '1', activo: false }))).message).toMatch(/nada que guardar/);
   });
 });
 
-// =================================================================== solo 4 campos
+// =================================================================== lo que sigue siendo solo del supervisor
 describe('cualquier otra clave se ignora', () => {
-  it('nombre, cédula, n.º de contrato, honorario, riesgo, activo y línea NO cambian', async () => {
+  it('nombre, cédula, riesgo nuevo/desde, activo y estado NO cambian', async () => {
     const id = await crearContratista(db, { linea: 'Línea de prueba' });
     const antes = await contrato(id);
     const r = await guardarMiContrato(deps, id, {
       revisoCargo: 'Nuevo cargo',
-      honorario: 1,
       valor_total: 999, // en snake_case tampoco vale
-      riesgo: 'V',
       riesgoNuevo: 'V',
       riesgoDesde: '2026-02-01',
-      numeroContrato: 'HACKEADO',
       nombre: 'OTRO NOMBRE',
       cedula: '9999999999',
       activo: false,
-      linea: 'otra línea',
+      estado: 'pendiente',
+      verificadaEn: '2026-01-01',
       id: 999,
       contratoId: 999,
     });
@@ -399,30 +409,247 @@ describe('cualquier otra clave se ignora', () => {
     const id = await crearContratista(db);
     const antes = await contrato(id);
     // solo claves no editables: no hay nada que guardar
-    await amable(guardarMiContrato(deps, id, { nombre: 'X', cedula: '1', honorario: 5, riesgo: 'V', activo: false, linea: 'x', numeroContrato: 'Y' }));
+    await amable(guardarMiContrato(deps, id, { nombre: 'X', cedula: '1', riesgoNuevo: 'V', riesgoDesde: '2026-02-01', activo: false }));
     // las no editables no producen errores de validación ni cambios aunque traigan basura
-    const e = await validacion(guardarMiContrato(deps, id, { honorario: 'basura', riesgo: 'ZZ', cedula: 'abc', ciudad: '' }));
+    const e = await validacion(guardarMiContrato(deps, id, { riesgoNuevo: 'ZZ', cedula: 'abc', nombre: '', ciudad: '' }));
     expect(Object.keys(e.campos)).toEqual(['ciudad']);
     expect(await contrato(id)).toEqual(antes);
     expect(await filasCambios()).toHaveLength(0);
   });
 
-  it('valorTotal sí es editable (con su validación), pero el honorario con el que se compara es el del supervisor', async () => {
+  it('el nombre y la cédula (con lo que entra) no cambian ni junto con campos que sí se editan', async () => {
     const id = await crearContratista(db);
-    await guardarMiContrato(deps, id, { valorTotal: '50.000.000', honorario: 1 });
+    await guardarMiContrato(deps, id, { honorario: '4.500.000', riesgo: 'II', nombre: 'OTRO NOMBRE', cedula: '1234567890' });
     const c = await contrato(id);
-    expect(c.valorTotal).toBe(50000000);
-    expect(c.honorario).toBe(4009000);
+    expect(c.nombre).toBe('PRUEBA PÉREZ');
+    expect(c.cedula).toBe('1000000879');
+    expect(c.honorario).toBe(4500000);
+    expect((await login(deps, 'prueba perez', '0879')).contratoId).toBe(id); // el PIN sigue siendo el mismo
+  });
+});
+
+// =================================================================== honorario, riesgo ARL, línea y n.º de contrato
+describe('honorario, riesgo ARL, equipo o línea y número de contrato', () => {
+  it('línea y n.º de contrato: se guardan, se recortan y se anotan sin alerta con autor contratista', async () => {
+    const id = await crearContratista(db);
+    await guardarMiContrato(deps, id, { linea: '  Observatorio  ', numeroContrato: ' 2026CPS111 ' });
+    const c = await contrato(id);
+    expect(c.linea).toBe('Observatorio');
+    expect(c.numeroContrato).toBe('2026CPS111');
+    const f = await filasCambios();
+    expect(f.map((x) => [x.campo, x.antes, x.despues, x.alerta, x.autor])).toEqual([
+      ['linea', '(vacío)', 'Observatorio', false, 'contratista'],
+      ['numeroContrato', '2026CPS999', '2026CPS111', false, 'contratista'],
+    ]);
+  });
+
+  it('la línea es opcional: se puede borrar; el n.º de contrato no', async () => {
+    const id = await crearContratista(db, { linea: 'Equipo viejo' });
+    await guardarMiContrato(deps, id, { linea: '' });
+    expect((await contrato(id)).linea).toBe('');
+    const e = await validacion(guardarMiContrato(deps, id, { numeroContrato: '  ' }));
+    expect(e.campos.numeroContrato).toMatch(/Escribe el número/);
+    expect((await contrato(id)).numeroContrato).toBe('2026CPS999');
+  });
+
+  it('largos máximos: línea 120 y n.º de contrato 60 (justo en el límite sí pasa) y tienen que ser texto', async () => {
+    const id = await crearContratista(db);
+    const e = await validacion(guardarMiContrato(deps, id, { linea: 'l'.repeat(121), numeroContrato: 'n'.repeat(61) }));
+    expect(e.campos.linea).toMatch(/120/);
+    expect(e.campos.numeroContrato).toMatch(/60/);
+    expect(Object.keys((await validacion(guardarMiContrato(deps, id, { linea: 5, numeroContrato: {} }))).campos).sort()).toEqual(['linea', 'numeroContrato']);
+    await guardarMiContrato(deps, id, { linea: 'l'.repeat(120), numeroContrato: 'n'.repeat(60) });
+    expect((await contrato(id)).numeroContrato).toBe('n'.repeat(60));
+  });
+
+  it('honorario: acepta "$ 4.500.000", "4500000" y números; se anota como dinero y con alerta', async () => {
+    const id = await crearContratista(db);
+    await guardarMiContrato(deps, id, { honorario: '$ 4.500.000' });
+    expect((await contrato(id)).honorario).toBe(4500000);
+    await guardarMiContrato(deps, id, { honorario: '5064000' });
+    expect((await contrato(id)).honorario).toBe(5064000);
+    await guardarMiContrato(deps, id, { honorario: 4009000 });
+    expect((await contrato(id)).honorario).toBe(4009000);
+    expect((await filasCambios()).map((x) => [x.campo, x.antes, x.despues, x.alerta])).toEqual([
+      ['honorario', '$4.009.000', '$4.500.000', true],
+      ['honorario', '$4.500.000', '$5.064.000', true],
+      ['honorario', '$5.064.000', '$4.009.000', true],
+    ]);
+  });
+
+  it('honorario inválido: entero en pesos, mayor que cero y hasta 2.000.000.000; no se guarda nada', async () => {
+    const id = await crearContratista(db);
+    for (const malo of ['abc', '0', -5, '1.5.5', true, {}, 2_000_000_001, '', '   ', null]) {
+      const e = await validacion(guardarMiContrato(deps, id, { honorario: malo }));
+      expect(Object.keys(e.campos), String(malo)).toEqual(['honorario']);
+    }
+    expect((await contrato(id)).honorario).toBe(4009000);
+    expect(await filasCambios()).toHaveLength(0);
+  });
+
+  it('riesgo ARL: de I a V (también 1 a 5 y en minúscula), se anota y lleva alerta', async () => {
+    const id = await crearContratista(db);
+    await guardarMiContrato(deps, id, { riesgo: 'iv' });
+    expect((await contrato(id)).riesgo).toBe('IV');
+    await guardarMiContrato(deps, id, { riesgo: 2 });
+    expect((await contrato(id)).riesgo).toBe('II');
+    expect((await filasCambios()).map((x) => [x.campo, x.antes, x.despues, x.alerta])).toEqual([
+      ['riesgo', 'III', 'IV', true],
+      ['riesgo', 'IV', 'II', true],
+    ]);
+  });
+
+  it('riesgo inválido o vacío: error en riesgo y no se guarda nada', async () => {
+    const id = await crearContratista(db);
+    for (const malo of ['VI', '0', '6', 'ZZ', true, {}, '', '  ', null]) {
+      const e = await validacion(guardarMiContrato(deps, id, { riesgo: malo }));
+      expect(Object.keys(e.campos), String(malo)).toEqual(['riesgo']);
+    }
+    expect((await contrato(id)).riesgo).toBe('III');
+    expect(await filasCambios()).toHaveLength(0);
+  });
+
+  it('solo honorario y riesgo llevan alerta; los demás cambios de este grupo no', async () => {
+    const id = await crearContratista(db);
+    await guardarMiContrato(deps, id, { linea: 'Equipo', numeroContrato: '2026CPS111', honorario: '4.500.000', riesgo: 'V', cargo: 'Otro cargo' });
+    const alertas = Object.fromEntries((await filasCambios()).map((x) => [x.campo, x.alerta]));
+    expect(alertas).toEqual({ linea: false, numeroContrato: false, honorario: true, riesgo: true, cargo: false });
+  });
+
+  it('mandar el mismo honorario o riesgo no anota nada ni borra la verificación', async () => {
+    const id = await crearContratista(db, { verificadaEn: new Date('2026-09-01T12:00:00Z') });
+    await guardarMiContrato(deps, id, { honorario: '$ 4.009.000', riesgo: 'iii', numeroContrato: ' 2026CPS999 ', linea: '' });
+    expect(await filasCambios()).toHaveLength(0);
+    expect((await contrato(id)).verificadaEn).not.toBeNull();
+  });
+
+  it('cada uno de los cuatro borra verificada_en', async () => {
+    const cuerpos = [{ linea: 'Equipo' }, { numeroContrato: '2026CPS111' }, { honorario: '4.500.000' }, { riesgo: 'V' }];
+    for (const [i, cuerpo] of cuerpos.entries()) {
+      const id = await crearContratista(db, { verificadaEn: new Date('2026-09-01T12:00:00Z'), nombre: `PRUEBA NÚMERO ${i}`, cedula: `100000100${i}` });
+      expect((await contrato(id)).verificadaEn, JSON.stringify(cuerpo)).not.toBeNull();
+      await guardarMiContrato(deps, id, cuerpo);
+      expect((await contrato(id)).verificadaEn, JSON.stringify(cuerpo)).toBeNull();
+    }
+  });
+
+  it('el valor total no puede quedar menor que el honorario NUEVO (en la misma petición o ya guardado)', async () => {
+    const id = await crearContratista(db);
+    // el honorario nuevo es mayor que el valor total que manda
+    const e1 = await validacion(guardarMiContrato(deps, id, { honorario: '6.000.000', valorTotal: '5.000.000' }));
+    expect(e1.campos.valorTotal).toMatch(/no puede ser menor que el honorario/);
+    // el honorario nuevo es mayor que el valor total ya guardado y no manda valor total
+    const e2 = await validacion(guardarMiContrato(deps, id, { honorario: '37.000.000' }));
+    expect(e2.campos.valorTotal).toMatch(/no puede ser menor que el honorario/);
+    expect((await contrato(id)).honorario).toBe(4009000);
+    // el valor total que sería menor que el honorario viejo pero no que el nuevo, sí pasa
+    await guardarMiContrato(deps, id, { honorario: '1.000.000', valorTotal: '3.000.000' });
+    const c = await contrato(id);
+    expect([c.honorario, c.valorTotal]).toEqual([1000000, 3000000]);
+  });
+
+  it('el aviso del valor total usa el honorario NUEVO si cambian los dos en la misma petición', async () => {
+    const id = await crearContratista(db);
+    // con el honorario nuevo 5.064.000, nueve meses completos son 45.576.000: coincide, no hay aviso
+    const igual = await guardarMiContrato(deps, id, { honorario: '5.064.000', valorTotal: '45.576.000' });
+    expect(igual.aviso).toBeUndefined();
+    expect(igual.datos.valorTotalEsperado).toBe(45576000);
+    expect((await filasCambios()).find((x) => x.campo === 'valorTotal')?.alerta).toBe(false);
+
+    // con el honorario viejo (4.009.000) ese valor sí habría dado aviso: ahora el aviso compara con el nuevo
+    const otro = await guardarMiContrato(deps, id, { honorario: '4.500.000', valorTotal: '45.576.000' });
+    expect(otro.datos.valorTotalEsperado).toBe(40500000);
+    expect(otro.aviso).toBe(
+      'El valor total que escribiste ($45.576.000) no coincide con el que da tu honorario por la vigencia ($40.500.000). ' +
+        'Revísalo con tu acta; si tu acta dice otra cifra, déjalo así.',
+    );
+    const filas = await filasCambios();
+    expect(filas.filter((x) => x.campo === 'valorTotal')).toHaveLength(1); // el segundo guardado no cambió el valor total
+  });
+
+  it('cambiar solo el honorario no da aviso, pero el esperado que devuelve ya usa el nuevo', async () => {
+    const id = await crearContratista(db);
+    const r = await guardarMiContrato(deps, id, { honorario: '4.500.000' });
+    expect(r.aviso).toBeUndefined();
+    expect(r.datos.honorario).toBe(4500000);
+    expect(r.datos.valorTotalEsperado).toBe(40500000);
+    expect(r.contrato.honorario).toBe(4500000);
+  });
+
+  it('el riesgo y el n.º de contrato nuevos salen en el resumen de la sesión', async () => {
+    const id = await crearContratista(db);
+    const r = await guardarMiContrato(deps, id, { riesgo: 'V', numeroContrato: '2026CPS111' });
+    expect(r.contrato.riesgo).toBe('V');
+    expect(r.contrato.numeroContrato).toBe('2026CPS111');
+    expect(r.datos).toMatchObject({ riesgo: 'V', numeroContrato: '2026CPS111' });
+    const s = await resumenDeSesion(deps, id);
+    expect([s.riesgo, s.numeroContrato]).toEqual(['V', '2026CPS111']);
+  });
+
+  it('recalcula solo el periodo vigente: el valor y la foto de cada cuenta no cambian, el acumulado sí', async () => {
+    const id = await crearContratista(db);
+    const c0 = await contrato(id);
+    const snapshot = snapshotDeContrato(c0, '2026-03');
+    const marzo = await crearCarga(db, id, '2026-03', { contratoSnapshot: snapshot, acumulado: 0, pct: 0 });
+    const r = await guardarMiContrato(deps, id, { honorario: '$ 5.000.000' });
+    const [g] = await db.select().from(cargas).where(eq(cargas.id, marzo));
+    // lo que ya se cobró en marzo sigue en 4.009.000 y su foto conserva el honorario de entonces
+    expect(g.valor).toBe(4009000);
+    expect(g.contratoSnapshot).toEqual(snapshot);
+    expect(g.contratoSnapshot?.honorario).toBe(4009000);
+    // enero y febrero (sin cuenta) se cuentan con el honorario nuevo: 2 x 5.000.000 + 4.009.000 de marzo
+    expect(g.acumulado).toBe(2 * 5000000 + 4009000);
+    expect(g.pct).toBeCloseTo((2 * 5000000 + 4009000) / 36081000, 10);
+    expect(r.contrato.meses.find((m) => m.key === '2026-09')?.valor).toBe(5000000); // lo que se cobrará desde ahora
+  });
+
+  it('una cuenta fuera del periodo vigente conserva su historia aunque cambie el honorario', async () => {
+    const id = await crearContratista(db);
+    const vieja = await crearCarga(db, id, '2025-12', { acumulado: 1234567, pct: 0.42 });
+    const enero = await crearCarga(db, id, '2026-01', { acumulado: 0, pct: 0 });
+    await guardarMiContrato(deps, id, { honorario: '5.000.000', riesgo: 'IV' });
+    const [v] = await db.select().from(cargas).where(eq(cargas.id, vieja));
+    expect([v.acumulado, v.pct, v.valor]).toEqual([1234567, 0.42, 4009000]);
+    const [e] = await db.select().from(cargas).where(eq(cargas.id, enero));
+    expect(e.acumulado).toBe(4009000); // enero: solo lo cobrado en enero
+    expect(e.valor).toBe(4009000);
+  });
+
+  it('sin sesión (contrato desactivado) no se puede cambiar el honorario', async () => {
+    const id = await crearContratista(db, { activo: false });
+    expect((await amable(guardarMiContrato(deps, id, { honorario: '4.500.000' }))).estado).toBe(401);
+    expect(await filasCambios()).toHaveLength(0);
   });
 });
 
 // =================================================================== perfil completo
 describe('perfilCompleto y faltan', () => {
-  const VACIOS = { direccion: '', telefono: '', ciudad: '', cargo: '', objeto: '', revisoNombre: '', revisoCargo: '', inicio: null, fin: null, valorTotal: null };
+  const VACIOS = {
+    direccion: '', telefono: '', ciudad: '', cargo: '', numeroContrato: '', objeto: '', revisoNombre: '', revisoCargo: '',
+    inicio: null, fin: null, valorTotal: null,
+  };
   const TODAS = [
-    'Dirección', 'Teléfono', 'Ciudad', 'Cargo', 'Objeto del contrato', 'Fecha de inicio', 'Fecha de fin',
+    'Dirección', 'Teléfono', 'Ciudad', 'Cargo', 'Número de contrato', 'Objeto del contrato', 'Fecha de inicio', 'Fecha de fin',
     'Valor total del contrato', 'Nombre de quien revisa tu cuenta', 'Cargo de quien revisa tu cuenta',
   ];
+
+  it('el n.º de contrato y el honorario son obligatorios; la línea y el riesgo no se piden', async () => {
+    const id = await crearContratista(db, { linea: '', riesgo: 'I' });
+    const [c] = await db.select().from(contratos).where(eq(contratos.id, id));
+    expect(faltanDelPerfil(c)).toEqual([]);
+    expect(faltanDelPerfil({ ...c, numeroContrato: '  ' })).toEqual(['Número de contrato']);
+    expect(faltanDelPerfil({ ...c, honorario: null })).toEqual(['Honorario mensual']);
+    expect(faltanDelPerfil({ ...c, honorario: 0 })).toEqual(['Honorario mensual']);
+    expect(faltanDelPerfil({ ...c, numeroContrato: '', honorario: null })).toEqual(['Número de contrato', 'Honorario mensual']);
+  });
+
+  it('vaciar el n.º de contrato con el supervisor hace que vuelva a faltar, y ella lo completa', async () => {
+    const id = await crearContratista(db);
+    await actualizarContrato(deps, id, { numeroContrato: '' });
+    expect((await resumenDeSesion(deps, id)).faltan).toEqual(['Número de contrato']);
+    const r = await guardarMiContrato(deps, id, { numeroContrato: '2026CPS111' });
+    expect(r.contrato.perfilCompleto).toBe(true);
+  });
 
   it('un contrato lleno está completo (el correo vacío no cuenta)', async () => {
     const id = await crearContratista(db, { correo: '' });
@@ -451,6 +678,7 @@ describe('perfilCompleto y faltan', () => {
       [{ telefono: '3001112233' }, 'Teléfono'],
       [{ ciudad: 'Medellín' }, 'Ciudad'],
       [{ cargo: 'Profesional' }, 'Cargo'],
+      [{ numeroContrato: '2026CPS999' }, 'Número de contrato'],
       [{ objeto: 'Objeto ficticio.' }, 'Objeto del contrato'],
       [{ inicio: '2026-01-01' }, 'Fecha de inicio'],
       [{ fin: '2026-09-30' }, 'Fecha de fin'],
@@ -476,7 +704,7 @@ describe('perfilCompleto y faltan', () => {
   it('el perfil se puede llenar todo de una vez, con el correo opcional', async () => {
     const id = await crearContratista(db, VACIOS);
     const r = await guardarMiContrato(deps, id, {
-      direccion: 'Calle 9 # 8-7', telefono: '300 111 2233', ciudad: 'Medellín', cargo: 'Profesional', objeto: 'Objeto ficticio.',
+      direccion: 'Calle 9 # 8-7', telefono: '300 111 2233', ciudad: 'Medellín', cargo: 'Profesional', numeroContrato: '2026CPS999', objeto: 'Objeto ficticio.',
       inicio: '2026-01-16', fin: '2026-09-30', valorTotal: '34.076.500', revisoNombre: 'Revisora de Prueba', revisoCargo: 'Apoyo Técnico',
     });
     expect(r.contrato.perfilCompleto).toBe(true);
@@ -731,10 +959,26 @@ describe('GET /api/admin/cambios', () => {
     const et = (await listarCambios(db)).map((c) => c.etiqueta).sort();
     expect(et).toEqual(
       [
-        'Dirección', 'Teléfono', 'Ciudad', 'Correo', 'Cargo', 'Objeto del contrato', 'Fecha de inicio', 'Fecha de fin',
-        'Valor total del contrato', 'Revisó (nombre)', 'Revisó (cargo)', 'otroCampo',
+        'Dirección', 'Teléfono', 'Ciudad', 'Correo', 'Cargo', 'Equipo o línea', 'N.º de contrato', 'Objeto del contrato',
+        'Fecha de inicio', 'Fecha de fin', 'Honorario mensual', 'Valor total del contrato', 'Riesgo ARL', 'Revisó (nombre)',
+        'Revisó (cargo)', 'otroCampo',
       ].sort(),
     );
+  });
+
+  it('devuelve `alerta`: true en honorario y riesgo de la contratista, nunca en los del admin', async () => {
+    const d = depsConReloj();
+    const id = await crearContratista(db, { nombre: 'ANA PRUEBA', cedula: '1000000111' });
+    await guardarMiContrato(d, id, { honorario: '4.500.000', riesgo: 'IV', linea: 'Equipo' });
+    await actualizarContrato(d, id, { honorario: 5064000, riesgo: 'II' });
+    const todos = await listarCambios(db);
+    expect(todos.map((c) => [c.autor, c.campo, c.etiqueta, c.alerta])).toEqual([
+      ['admin', 'riesgo', 'Riesgo ARL', false],
+      ['admin', 'honorario', 'Honorario mensual', false],
+      ['contratista', 'riesgo', 'Riesgo ARL', true],
+      ['contratista', 'honorario', 'Honorario mensual', true],
+      ['contratista', 'linea', 'Equipo o línea', false],
+    ]);
   });
 
   it('devuelve `alerta`: true solo en el cambio de valor total distinto al esperado', async () => {

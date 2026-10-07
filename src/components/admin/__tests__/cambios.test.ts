@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { normalizarCambio, type CambioContrato } from "../apiAdmin";
-import { contarDeContratistas, fmtFechaHoraCambio, lineaCambio, TEXTO_ALERTA_CAMBIO, textoAutorCambio } from "../helpers";
+import { contarDeContratistas, fmtFechaHoraCambio, lineaCambio, TEXTO_ALERTA_CAMBIO, textoAlertaCambio, textoAutorCambio } from "../helpers";
 
 const base: CambioContrato = {
   id: 1, contratoId: 7, nombre: "Ana Prueba Ejemplo", autor: "contratista", campo: "fin", etiqueta: "Fecha de fin",
@@ -28,6 +28,13 @@ describe("bitácora de cambios", () => {
 
   it("el texto de la alerta del valor total", () => {
     expect(TEXTO_ALERTA_CAMBIO).toBe("Valor total distinto al esperado");
+  });
+
+  it("el texto de la alerta depende del campo", () => {
+    expect(textoAlertaCambio("valorTotal")).toBe("Valor total distinto al esperado");
+    expect(textoAlertaCambio("honorario")).toBe("Cambió el honorario");
+    expect(textoAlertaCambio("riesgo")).toBe("Cambió el riesgo ARL");
+    expect(textoAlertaCambio("otroCampo")).toBe("Para revisar");
   });
 
   it("normaliza `alerta`: solo true cuenta", () => {

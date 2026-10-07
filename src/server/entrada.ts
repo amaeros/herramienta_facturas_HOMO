@@ -100,6 +100,15 @@ export const CORREO_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const MENSAJE_CORREO = 'El correo no tiene un formato válido (por ejemplo nombre@correo.com).';
 export const MENSAJE_VALOR_TOTAL_MENOR = 'El valor total del contrato no puede ser menor que el honorario mensual.';
 
+export const RIESGOS = ['I', 'II', 'III', 'IV', 'V'];
+
+/** 'iii', 'III' o 3 -> 'III'; null si no es un riesgo ARL de I a V. */
+export function riesgoRomano(v: unknown): string | null {
+  const s = String(v ?? '').trim().toUpperCase();
+  if (/^[1-5]$/.test(s)) return RIESGOS[Number(s) - 1];
+  return RIESGOS.includes(s) ? s : null;
+}
+
 export function fechaValida(s: unknown): string {
   const t = texto(s).trim();
   return parseYMD(t) ? t : '';

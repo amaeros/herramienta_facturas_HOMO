@@ -2,8 +2,8 @@ import { connection, type NextRequest } from 'next/server';
 import { contratoIdDeSesion, deps, leerJson, ok, responder } from '@/server/http';
 import { guardarMiContrato, leerMiContrato } from '@/server/miContrato';
 
-// GET /api/mi-contrato -> { ok, datos: { direccion, telefono, ciudad, correo, cargo, objeto, inicio, fin, valorTotal,
-//   revisoNombre, revisoCargo, valorTotalEsperado } }
+// GET /api/mi-contrato -> { ok, datos: { direccion, telefono, ciudad, correo, cargo, linea, numeroContrato, objeto,
+//   inicio, fin, honorario, valorTotal, riesgo, revisoNombre, revisoCargo, valorTotalEsperado } }
 export async function GET(req: NextRequest) {
   await connection(); // siempre en tiempo de petición, nunca prerenderizada ni cacheada
   return responder(async () => {
@@ -12,8 +12,8 @@ export async function GET(req: NextRequest) {
   });
 }
 
-// PUT /api/mi-contrato { direccion?, telefono?, ciudad?, correo?, cargo?, objeto?, inicio?, fin?, valorTotal?,
-//   revisoNombre?, revisoCargo? } -> { ok, datos, contrato: Resumen, aviso? }
+// PUT /api/mi-contrato { direccion?, telefono?, ciudad?, correo?, cargo?, linea?, numeroContrato?, objeto?, inicio?,
+//   fin?, honorario?, valorTotal?, riesgo?, revisoNombre?, revisoCargo? } -> { ok, datos, contrato: Resumen, aviso? }
 // Cualquier otra clave se ignora. `aviso` (no bloquea): el valor total no coincide con el que da el honorario.
 // Errores: { ok:false, error, campos:{ campo: mensaje } }.
 export async function PUT(req: NextRequest) {

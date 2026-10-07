@@ -35,10 +35,17 @@ export interface DatosMiContrato {
   ciudad: string;
   correo: string;
   cargo: string;
+  /** Equipo o línea (opcional). */
+  linea: string;
+  numeroContrato: string;
   objeto: string;
   inicio: string;
   fin: string;
+  /** Lo que cobra por un mes completo. */
+  honorario: number | null;
   valorTotal: number | null;
+  /** Riesgo ARL, de 'I' a 'V'. */
+  riesgo: string;
   revisoNombre: string;
   revisoCargo: string;
   /** Lo que da el honorario por toda la vigencia (null si faltan fechas). */

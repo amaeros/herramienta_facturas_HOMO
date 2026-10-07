@@ -130,8 +130,17 @@ export function fmtFechaHoraCambio(iso: string | null | undefined): string {
 const SIN_VALOR = "(vacío)";
 const DATO_PERSONAL = "(dato personal)";
 
-/** Lo que se muestra en un cambio con `alerta`. */
+/** Lo que se muestra en un cambio con `alerta`, según el campo que cambió. */
 export const TEXTO_ALERTA_CAMBIO = "Valor total distinto al esperado";
+const TEXTO_ALERTA_POR_CAMPO: Record<string, string> = {
+  valorTotal: TEXTO_ALERTA_CAMBIO,
+  honorario: "Cambió el honorario",
+  riesgo: "Cambió el riesgo ARL",
+};
+
+export function textoAlertaCambio(campo: string): string {
+  return TEXTO_ALERTA_POR_CAMPO[campo] ?? "Para revisar";
+}
 
 /** Quién hizo el cambio, en palabras. */
 export function textoAutorCambio(autor: string): string {

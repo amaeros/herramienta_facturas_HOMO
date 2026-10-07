@@ -1,5 +1,6 @@
 // "Perfil completo" de la contratista: los datos que salen en su cuenta de cobro y que ella misma llena la primera vez
-// (pantalla "Antes de empezar, completa tus datos"). El correo es opcional y no cuenta. Ver docs/ARQUITECTURA.md.
+// (pantalla "Antes de empezar, completa tus datos"). El correo y el equipo o línea son opcionales y no cuentan;
+// el riesgo ARL siempre tiene valor (por defecto I), así que tampoco se pide. Ver docs/ARQUITECTURA.md.
 
 import type { ContratoFila } from './db/schema';
 
@@ -9,9 +10,11 @@ export const CAMPOS_PERFIL: ReadonlyArray<{ campo: keyof ContratoFila; etiqueta:
   { campo: 'telefono', etiqueta: 'Teléfono' },
   { campo: 'ciudad', etiqueta: 'Ciudad' },
   { campo: 'cargo', etiqueta: 'Cargo' },
+  { campo: 'numeroContrato', etiqueta: 'Número de contrato' },
   { campo: 'objeto', etiqueta: 'Objeto del contrato' },
   { campo: 'inicio', etiqueta: 'Fecha de inicio' },
   { campo: 'fin', etiqueta: 'Fecha de fin' },
+  { campo: 'honorario', etiqueta: 'Honorario mensual' },
   { campo: 'valorTotal', etiqueta: 'Valor total del contrato' },
   { campo: 'revisoNombre', etiqueta: 'Nombre de quien revisa tu cuenta' },
   { campo: 'revisoCargo', etiqueta: 'Cargo de quien revisa tu cuenta' },

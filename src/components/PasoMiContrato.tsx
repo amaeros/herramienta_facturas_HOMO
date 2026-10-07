@@ -4,10 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { ApiError, esSesionVencida, mensajeDeError } from "./api";
 import CampoFormulario, { type CampoFormularioProps } from "./CampoFormulario";
 import {
-  cambiosDeMiContrato, erroresDeMiContrato, formCompleto, formatearValorTotal, formDeDatos, LARGO_MAXIMO,
-  MI_CONTRATO_VACIO, primerCampoConError, validarMiContrato,
+  cambiaAlgoQueVeElSupervisor, cambiosDeMiContrato, erroresDeMiContrato, formCompleto, formatearValorTotal, formDeDatos,
+  LARGO_MAXIMO, MI_CONTRATO_VACIO, primerCampoConError, validarMiContrato,
   type CampoMiContrato, type ErroresMiContrato, type FormMiContrato,
 } from "./miContrato";
+import { NIVELES_RIESGO } from "./registro";
 import type { DatosMiContrato, RespGuardarMiContrato, Resumen } from "./tipos";
 
 interface Props {
@@ -132,6 +133,8 @@ export default function PasoMiContrato({ inicial, cargar, guardar, avisar, limpi
     }
   }
 
+  const avisaAlSupervisor = carga.estado === "listo" && cambiaAlgoQueVeElSupervisor(carga.original, form);
+
   const campo = (c: CampoMiContrato, etiqueta: string, extra: Partial<CampoFormularioProps> = {}) => (
     <CampoFormulario
       id={"mc-" + c}
@@ -180,11 +183,37 @@ export default function PasoMiContrato({ inicial, cargar, guardar, avisar, limpi
 
           <div className="seccion">
             <h3>Tu contrato</h3>
+            {campo("linea", "Equipo o línea", { opcional: true })}
+            {campo("numeroContrato", "Número de contrato")}
             {campo("objeto", "Objeto del contrato", { tipo: "area" })}
             <div className="dos">
               {campo("inicio", "Fecha de inicio", { tipo: "date" })}
               {campo("fin", "Fecha de fin", { tipo: "date" })}
             </div>
+            {campo("honorario", "Honorario mensual", {
+              tipo: "dinero",
+              ayuda: "El que dice tu contrato: lo que cobras por un mes completo.",
+              onSalida: () => setForm((prev) => ({ ...prev, honorario: formatearValorTotal(prev.honorario) })),
+            })}
+            <div className="campo">
+              <label htmlFor="mc-riesgo">
+                Riesgo ARL<span className="marca-obligatorio" aria-hidden="true"> *</span>
+              </label>
+              <p id="mc-riesgo-ayuda" className="ayuda ayuda-campo">El que aparece en tu planilla de seguridad social.</p>
+              <select
+                id="mc-riesgo"
+                value={form.riesgo}
+                aria-required="true"
+                aria-invalid={errores.riesgo ? true : undefined}
+                aria-describedby={"mc-riesgo-ayuda" + (errores.riesgo ? " mc-riesgo-error" : "")}
+                onChange={(e) => poner("riesgo", e.target.value)}
+              >
+                <option value="">Escoge el riesgo…</option>
+                {NIVELES_RIESGO.map((n) => <option key={n} value={n}>Riesgo {n}</option>)}
+              </select>
+              {errores.riesgo && <p id="mc-riesgo-error" className="error-campo">{errores.riesgo}</p>}
+            </div>
+            {avisaAlSupervisor && <p className="ayuda" role="status">Tu supervisor verá este cambio.</p>}
             {campo("valorTotal", "Valor total del contrato", {
               tipo: "dinero",
               ayuda: "El que dice tu contrato o tu última acta de prórroga y adición, incluyendo las adiciones.",

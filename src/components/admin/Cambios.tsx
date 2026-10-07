@@ -2,7 +2,7 @@
 
 import { useId, useState } from "react";
 import { apiAdmin, type CambioContrato } from "./apiAdmin";
-import { contarDeContratistas, fmtFechaHoraCambio, lineaCambio, TEXTO_ALERTA_CAMBIO, textoAutorCambio } from "./helpers";
+import { contarDeContratistas, fmtFechaHoraCambio, lineaCambio, textoAlertaCambio, textoAutorCambio } from "./helpers";
 import { useDatos } from "./useDatos";
 import css from "./admin.module.css";
 
@@ -14,7 +14,7 @@ interface TablaProps {
 
 /**
  * Tabla de cambios al contrato. La franja de color marca los que hizo la contratista (para revisar);
- * los que tienen alerta (valor total distinto al esperado) llevan además el texto que lo dice.
+ * los que tienen alerta (valor total distinto al esperado, o cambio de honorario o de riesgo ARL) llevan además el texto que lo dice.
  */
 function TablaCambios({ lista, conNombre }: TablaProps) {
   return (
@@ -36,7 +36,7 @@ function TablaCambios({ lista, conNombre }: TablaProps) {
               <td data-label="Quién"><span className={css.estadoTxt}>{textoAutorCambio(c.autor)}</span></td>
               <td data-label="Cambio">
                 {lineaCambio(c)}
-                {c.alerta && <span className={css.alertaCambio}>{TEXTO_ALERTA_CAMBIO}</span>}
+                {c.alerta && <span className={css.alertaCambio}>{textoAlertaCambio(c.campo)}</span>}
               </td>
             </tr>
           ))}

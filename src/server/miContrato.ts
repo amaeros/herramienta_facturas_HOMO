@@ -1,8 +1,10 @@
 // "Mi contrato": la contratista llena y corrige los datos de SU contrato que salen en la cuenta de cobro (dirección,
-// teléfono, ciudad, correo, cargo, objeto, fechas, valor total y quién revisa). Todo lo demás (nombre, cédula, n.º de
-// contrato, honorario, riesgo ARL, línea, activo) solo lo cambia el supervisor y se ignora si llega en el cuerpo.
-// Cada cambio real queda en la bitácora (cambios_contrato; los datos personales como "(dato personal)") y se
-// recalculan acumulado y % de las cuentas del periodo. Ver docs/ARQUITECTURA.md.
+// teléfono, ciudad, correo, cargo, equipo o línea, n.º de contrato, objeto, fechas, honorario mensual, valor total,
+// riesgo ARL y quién revisa). Todo lo demás (nombre, cédula, riesgo nuevo/desde, activo, estado) solo lo cambia el
+// supervisor y se ignora si llega en el cuerpo.
+// Cada cambio real queda en la bitácora (cambios_contrato; los datos personales como "(dato personal)"; el honorario
+// y el riesgo con alerta para que el supervisor los mire) y se recalculan acumulado y % de las cuentas del periodo.
+// Ver docs/ARQUITECTURA.md.
 
 import { eq } from 'drizzle-orm';
 import { expectedTotal, fmtMoney, parseYMD } from '../lib/calc';
@@ -16,6 +18,7 @@ import {
   MENSAJE_FIN_ANTES_DE_INICIO,
   MENSAJE_VALOR_TOTAL_MENOR,
   monto,
+  riesgoRomano,
 } from './entrada';
 import { ErrorAmable, ErrorValidacion } from './errores';
 import { contratoActivo, recalcularAcumulados, resumen, type Deps, type Resumen } from './servicios';
@@ -26,10 +29,17 @@ export type DatosMiContrato = {
   ciudad: string;
   correo: string;
   cargo: string;
+  /** Equipo o línea (opcional). */
+  linea: string;
+  numeroContrato: string;
   objeto: string;
   inicio: string;
   fin: string;
+  /** Lo que cobra por un mes completo (null si el contrato aún no lo tiene). */
+  honorario: number | null;
   valorTotal: number | null;
+  /** Riesgo ARL de I a V. */
+  riesgo: string;
   revisoNombre: string;
   revisoCargo: string;
   /** Lo que da el honorario por toda la vigencia (null si faltan fechas u honorario). */
@@ -43,6 +53,8 @@ const TEXTOS = {
   direccion: { max: 150, etiqueta: 'La dirección', pide: 'Escribe tu dirección.', obligatorio: true },
   ciudad: { max: 80, etiqueta: 'La ciudad', pide: 'Escribe tu ciudad.', obligatorio: true },
   cargo: { max: 120, etiqueta: 'El cargo', pide: 'Escribe tu cargo.', obligatorio: true },
+  linea: { max: 120, etiqueta: 'El equipo o línea', pide: '', obligatorio: false },
+  numeroContrato: { max: 60, etiqueta: 'El número de contrato', pide: 'Escribe el número de tu contrato.', obligatorio: true },
   objeto: { max: 1500, etiqueta: 'El objeto', pide: 'Escribe el objeto de tu contrato.', obligatorio: true },
   revisoNombre: { max: 120, etiqueta: 'El nombre de quien revisó', pide: 'Escribe el nombre de quien revisa tu cuenta.', obligatorio: true },
   revisoCargo: { max: 120, etiqueta: 'El cargo de quien revisó', pide: 'Escribe el cargo de quien revisa tu cuenta.', obligatorio: true },
@@ -62,10 +74,14 @@ export function datosDeContrato(c: ContratoFila): DatosMiContrato {
     ciudad: c.ciudad,
     correo: c.correo,
     cargo: c.cargo,
+    linea: c.linea,
+    numeroContrato: c.numeroContrato,
     objeto: c.objeto,
     inicio: c.inicio ?? '',
     fin: c.fin ?? '',
+    honorario: c.honorario,
     valorTotal: c.valorTotal,
+    riesgo: c.riesgo,
     revisoNombre: c.revisoNombre,
     revisoCargo: c.revisoCargo,
     valorTotalEsperado: valorTotalEsperadoDe(c),
@@ -105,7 +121,7 @@ export async function guardarMiContrato(
     const t = TEXTOS[k];
     const texto = textoDe(entrada[k]);
     if (texto === null) err[k] = `${t.etiqueta} debe ser texto.`;
-    else if (texto === '') err[k] = t.pide;
+    else if (texto === '' && t.obligatorio) err[k] = t.pide;
     else if (texto.length > t.max) err[k] = `${t.etiqueta} es demasiado largo (máximo ${t.max} caracteres).`;
     else nuevos[k] = texto;
   }
@@ -141,6 +157,28 @@ export async function guardarMiContrato(
     if (inicio && fin && fin < inicio) err.fin = MENSAJE_FIN_ANTES_DE_INICIO;
   }
 
+  if ('honorario' in entrada) {
+    const v = entrada.honorario;
+    const vacio = v === null || v === undefined || (typeof v === 'string' && v.trim() === '');
+    const n = vacio ? null : monto(v);
+    if (vacio) err.honorario = 'Escribe tu honorario mensual.';
+    else if (n === null || n <= 0 || n > MAX_ENTERO) {
+      err.honorario = 'El honorario mensual debe ser un valor en pesos mayor que cero (por ejemplo 4.009.000).';
+    } else nuevos.honorario = n;
+  }
+
+  if ('riesgo' in entrada) {
+    const v = entrada.riesgo;
+    if (v === null || v === undefined || (typeof v === 'string' && v.trim() === '')) err.riesgo = 'Escoge el riesgo ARL (I, II, III, IV o V).';
+    else {
+      const r = riesgoRomano(v);
+      if (r) nuevos.riesgo = r;
+      else err.riesgo = 'El riesgo ARL debe ser I, II, III, IV o V.';
+    }
+  }
+
+  // el valor total no puede ser menor que el honorario, con el honorario NUEVO si viene en la misma petición
+  const honorarioVigente = (nuevos.honorario as number | undefined) ?? actual.honorario;
   if ('valorTotal' in entrada) {
     const v = entrada.valorTotal;
     const vacio = v === null || v === undefined || (typeof v === 'string' && v.trim() === '');
@@ -148,8 +186,11 @@ export async function guardarMiContrato(
     if (vacio) err.valorTotal = 'Escribe el valor total de tu contrato.';
     else if (n === null || n <= 0 || n > MAX_ENTERO) {
       err.valorTotal = 'El valor total del contrato debe ser un valor en pesos mayor que cero (por ejemplo 44.099.000).';
-    } else if (actual.honorario !== null && n < actual.honorario) err.valorTotal = MENSAJE_VALOR_TOTAL_MENOR;
+    } else if (honorarioVigente !== null && n < honorarioVigente) err.valorTotal = MENSAJE_VALOR_TOTAL_MENOR;
     else nuevos.valorTotal = n;
+  } else if ('honorario' in nuevos && actual.valorTotal !== null && honorarioVigente !== null && actual.valorTotal < honorarioVigente) {
+    // subió el honorario por encima del valor total que ya tenía guardado: que corrija el valor total
+    err.valorTotal = MENSAJE_VALOR_TOTAL_MENOR;
   }
 
   if (Object.keys(err).length) throw new ErrorValidacion(err);
@@ -168,7 +209,10 @@ export async function guardarMiContrato(
   const esperado = valorTotalEsperadoDe(c);
   const distinto = 'valorTotal' in entrada && esperado !== null && c.valorTotal !== null && c.valorTotal !== esperado;
   if (cambios.length) {
-    for (const d of cambios) if (d.campo === 'valorTotal' && distinto) d.alerta = true;
+    // alerta (ámbar para el supervisor): valor total distinto al esperado y cualquier cambio de honorario o de riesgo ARL
+    for (const d of cambios) {
+      if ((d.campo === 'valorTotal' && distinto) || d.campo === 'honorario' || d.campo === 'riesgo') d.alerta = true;
+    }
     await registrarCambios(deps, contratoId, 'contratista', cambios);
     // las fechas y el valor total pueden mover el periodo y el %: acumulado y % se recalculan (el valor de cada mes
     // NO se re-evalúa y las fotos del contrato de las cuentas ya enviadas no se tocan)

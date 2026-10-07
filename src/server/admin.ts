@@ -2,7 +2,7 @@
 // cuentas del mes y parámetros. Las rutas de src/app/api/admin/** son delgadas y solo llaman a estas funciones.
 // Ver docs/ADMIN.md. Nunca se registran datos personales en logs.
 
-import { count, eq } from 'drizzle-orm';
+import { and, count, eq, inArray, ne } from 'drizzle-orm';
 import { addMonths, ESTADO_EMOJI, ESTADO_TEXTO, monthsBetween, parseYMD, type Estado } from '../lib/calc';
 import { nombreLimpio } from './archivos';
 import type { BlobStore } from './blob';
@@ -20,7 +20,7 @@ import {
   mesValido,
   normTxt,
 } from './entrada';
-import { ErrorAmable, ErrorValidacion } from './errores';
+import { ErrorAmable, ErrorValidacion, MENSAJE_GENERICO } from './errores';
 import { MAX_BYTES_IMPORTAR, parsearExcelControl } from './importar';
 import { cargarParametros, mesActual, recalcularAcumulados, type Deps } from './servicios';
 
@@ -78,7 +78,13 @@ function riesgoRomano(v: unknown): string | null {
  * Valida y limpia los datos de una trabajadora. `base` = la fila actual (PUT: lo que no viene se conserva) o null (POST).
  * `otros` = las demás trabajadoras (para nombre y cédula únicos). Lanza ErrorValidacion con TODOS los errores por campo.
  */
-export function validarContrato(entrada: Record<string, unknown>, base: ContratoFila | null, otros: ContratoFila[]): ValoresContrato {
+export function validarContrato(
+  entrada: Record<string, unknown>,
+  base: ContratoFila | null,
+  otros: ContratoFila[],
+  /** Mensajes de "ya existe" distintos a los del panel (el registro público no dice "otra trabajadora"). */
+  mensajes: { nombreRepetido?: string; cedulaRepetida?: string } = {},
+): ValoresContrato {
   const e = aCamel(entrada);
   const get = (k: keyof ContratoFila): unknown => (k in e ? e[k] : base ? base[k] : undefined);
   const err: Record<string, string> = {};
@@ -92,6 +98,7 @@ export function validarContrato(entrada: Record<string, unknown>, base: Contrato
     else if (nombre.length > 150) err.nombre = 'El nombre es demasiado largo (máximo 150 letras).';
     else if (otros.some((o) => normTxt(o.nombre) === normTxt(nombre))) {
       err.nombre =
+        mensajes.nombreRepetido ??
         'Ya hay otra trabajadora con ese nombre (no se distinguen tildes ni mayúsculas). El nombre es con el que entra al celular, no se puede repetir.';
     }
   }
@@ -103,7 +110,7 @@ export function validarContrato(entrada: Record<string, unknown>, base: Contrato
     cedula = soloDigitos(v);
     if (vacio(v)) err.cedula = 'Escribe la cédula (solo números).';
     else if (!/^\d{6,10}$/.test(cedula)) err.cedula = 'La cédula debe tener solo números, entre 6 y 10 dígitos.';
-    else if (otros.some((o) => o.cedula === cedula)) err.cedula = 'Ya hay otra trabajadora con esa cédula.';
+    else if (otros.some((o) => o.cedula === cedula)) err.cedula = mensajes.cedulaRepetida ?? 'Ya hay otra trabajadora con esa cédula.';
   }
 
   // riesgo
@@ -226,14 +233,15 @@ async function contarCargas(db: Db, id: number): Promise<number> {
   return Number(r?.n ?? 0);
 }
 
+/** Una trabajadora de verdad. Las solicitudes pendientes se manejan solo desde "Solicitudes" (aprobar o rechazar). */
 async function contratoPorId(db: Db, id: number): Promise<ContratoFila> {
   const [c] = await db.select().from(contratos).where(eq(contratos.id, id)).limit(1);
-  if (!c) throw new ErrorAmable(MSG_NO_TRABAJADORA, 404);
+  if (!c || c.estado === 'pendiente') throw new ErrorAmable(MSG_NO_TRABAJADORA, 404);
   return c;
 }
 
 export async function listarContratos(deps: Deps): Promise<ContratoAdmin[]> {
-  const filas = await deps.db.select().from(contratos);
+  const filas = await deps.db.select().from(contratos).where(ne(contratos.estado, 'pendiente'));
   const cuentas = await deps.db.select({ id: cargas.contratoId, n: count() }).from(cargas).groupBy(cargas.contratoId);
   const n = new Map(cuentas.map((r) => [r.id, Number(r.n)]));
   return filas.map((c) => ({ ...c, cargas: n.get(c.id) ?? 0 })).sort((a, b) => porNombre(a.nombre, b.nombre) || a.id - b.id);
@@ -292,6 +300,59 @@ export async function borrarContrato(deps: Deps, id: number, confirmar?: unknown
   await db.delete(contratos).where(eq(contratos.id, id));
 }
 
+// =================================================================== cambio en lote (fecha de fin y/o de inicio)
+export const MAX_LOTE = 100;
+
+export type ResultadoLote = { id: number; nombre: string; ok: boolean; error?: string };
+
+/**
+ * Cambia la fecha de fin y/o de inicio de varias trabajadoras a la vez. Solo esos dos campos: para cada una se hace la
+ * misma edición del panel (validaciones, bitácora y recálculo de acumulados). Si una falla (por ejemplo, el fin queda
+ * antes del inicio de ella), las demás se aplican igual y el resultado dice cuál falló y por qué.
+ */
+export async function actualizarLote(
+  deps: Deps,
+  entrada: Record<string, unknown>,
+): Promise<{ resultados: ResultadoLote[]; aplicadas: number; fallidas: number }> {
+  const err: Record<string, string> = {};
+  const lista = Array.isArray(entrada.ids) ? entrada.ids : null;
+  const ids = lista ? [...new Set(lista.map((x) => (typeof x === 'number' ? x : NaN)))] : [];
+  if (!lista || ids.length === 0) err.ids = 'Escoge al menos una trabajadora.';
+  else if (ids.some((x) => !Number.isInteger(x) || x <= 0)) err.ids = 'La lista de trabajadoras no es válida. Recarga la página e inténtalo de nuevo.';
+  else if (ids.length > MAX_LOTE) err.ids = `Puedes cambiar hasta ${MAX_LOTE} trabajadoras a la vez.`;
+
+  const cambio: Record<string, string> = {};
+  for (const k of ['inicio', 'fin'] as const) {
+    const v = entrada[k];
+    if (vacio(v)) continue;
+    if (typeof v !== 'string' || !parseYMD(v.trim())) err[k] = MENSAJE_FECHA_CONTRATO[k];
+    else cambio[k] = v.trim();
+  }
+  if (!err.ids && !err.inicio && !err.fin && Object.keys(cambio).length === 0) err.fin = 'Escribe la fecha de fin, la de inicio o las dos.';
+  if (cambio.inicio && cambio.fin && cambio.fin < cambio.inicio && !err.fin) err.fin = MENSAJE_FIN_ANTES_DE_INICIO;
+  if (Object.keys(err).length) throw new ErrorValidacion(err);
+
+  const nombres = new Map(
+    (await deps.db.select({ id: contratos.id, nombre: contratos.nombre }).from(contratos).where(inArray(contratos.id, ids))).map((f) => [f.id, f.nombre]),
+  );
+  const resultados: ResultadoLote[] = [];
+  for (const id of ids) {
+    const nombre = nombres.get(id) ?? '';
+    try {
+      await actualizarContrato(deps, id, { ...cambio });
+      resultados.push({ id, nombre, ok: true });
+    } catch (e) {
+      if (e instanceof ErrorAmable) resultados.push({ id, nombre, ok: false, error: e.message });
+      else {
+        console.error('Error en el cambio en lote:', e instanceof Error ? (e.stack ?? e.message) : e);
+        resultados.push({ id, nombre, ok: false, error: MENSAJE_GENERICO });
+      }
+    }
+  }
+  const aplicadas = resultados.filter((r) => r.ok).length;
+  return { resultados, aplicadas, fallidas: resultados.length - aplicadas };
+}
+
 // =================================================================== importar desde el Excel de control
 export type CambioImportacion = { campo: string; etiqueta: string; antes: string | number | null; despues: string | number | null };
 
@@ -329,6 +390,10 @@ export async function importarExcel(deps: Deps, bytes: Uint8Array, aplicar: bool
 
   for (const f of filas) {
     const ex = porCedula.get(f.cedula);
+    if (ex?.estado === 'pendiente') {
+      res.errores.push({ fila: f.fila, mensaje: 'Hay una solicitud pendiente con esa cédula. Apruébala o recházala en «Solicitudes».' });
+      continue;
+    }
     const dueño = porNom.get(normTxt(f.nombre));
     if (dueño !== undefined && dueño !== (ex?.id ?? -1)) {
       res.errores.push({ fila: f.fila, mensaje: 'Ya hay otra trabajadora con ese nombre (no se distinguen tildes ni mayúsculas).' });
@@ -460,7 +525,7 @@ export async function listarCargas(
 
   // activas cuyo contrato cubre ese mes y todavía no tienen cuenta
   const conCarga = new Set(lista.map((c) => c.contratoId));
-  const activos = await deps.db.select().from(contratos).where(eq(contratos.activo, true));
+  const activos = await deps.db.select().from(contratos).where(and(eq(contratos.activo, true), eq(contratos.estado, 'activa')));
   const faltan = activos
     .filter((c) => !conCarga.has(c.id) && monthsBetween(c.inicio, c.fin).includes(mes))
     .map((c) => ({ contratoId: c.id, nombre: c.nombre }))

@@ -20,10 +20,10 @@ src/app/        pantallas: / (contratista, celular) · /admin (fase 3)
 | Tabla | Columnas clave |
 |---|---|
 | `parametros` | una sola fila (id=1): pct_ibc, salud, pension, smmlv, ibc_piso_mult, ibc_techo_mult, arl (jsonb {I..V}), enviar_correo (bool), correo_supervisor, tolerancia_ss |
-| `contratos` | id, nombre, cedula (texto, solo dígitos), direccion, telefono, ciudad, cargo, numero_contrato, objeto, inicio (date), fin (date), honorario (int), valor_total (int), riesgo, riesgo_nuevo, riesgo_desde (date), reviso_nombre, reviso_cargo, activo (bool), correo |
+| `contratos` | id, nombre, cedula (texto, solo dígitos), direccion, telefono, ciudad, cargo, numero_contrato, objeto, inicio (date), fin (date), honorario (int), valor_total (int), riesgo, riesgo_nuevo, riesgo_desde (date), reviso_nombre, reviso_cargo, activo (bool), correo, linea, **estado** ('activa' por defecto, 'pendiente' o 'rechazada'; migración `0005_registro_estado`, que deja las filas existentes en 'activa'). Para entrar hace falta `estado = 'activa'` **y** `activo = true`: desactivar (activo = false) no toca el estado. Una solicitud de registro nace `pendiente` + `activo = false` |
 | `cargas` | id, contrato_id, mes ('YYYY-MM'), fecha_inicio, fecha_corte, planilla_numero, planilla_mes ('YYYY-MM'), ss_declarada (int), adicionales (jsonb [{numero, mes, valor, archivo}]), dias_manual (int null), motivo_novedad, doc_num, dias, valor, acumulado, pct, ss_esperada, desglose, estado ('OK'/'REVISAR'/'ERROR'), mensaje, lectura ('auto'/'corregido'/'manual'), archivo_planilla (pathname blob), observacion, aprobado (bool), creado, actualizado. **UNIQUE (contrato_id, mes)**: reenviar el mismo mes REEMPLAZA la fila (y borra "aprobado") |
 | `lecturas` | temp_id (uuid), contrato_id, archivo (pathname blob), tipo, lectura (jsonb), leyo (bool), creado. Caducan a las 6 h |
-| `intentos_pin` | clave (nombre normalizado), fallos, bloqueado_hasta |
+| `intentos_pin` | clave, fallos, ultimo_fallo, bloqueado_hasta. Claves: nombre normalizado (PIN de contratista), `__admin__` (contraseña de admin) y `__registro__:<ip>` (intentos de registro por IP: `ultimo_fallo` = cuándo empezó la hora, `fallos` = cuántos intentos van) |
 | `cambios_contrato` | id, contrato_id (FK, **borra en cascada**), autor ('contratista'/'admin'), campo (camelCase: 'inicio', 'fin', 'valorTotal', 'ciudad'...), antes, despues (texto ya legible: fechas DD/MM/AAAA, dinero `$7.174.000`, vacío = `(vacío)`; dirección, teléfono y correo siempre `(dato personal)`), alerta (bool, por defecto false: la contratista guardó un valor total distinto al esperado), creado (timestamptz). Bitácora de cambios al contrato; nunca guarda datos personales |
 
 Valores por defecto de `parametros` = los de PARAMETROS de la hoja (ver `legacy/apps-script/CONTRATO_DATOS.md`).
@@ -50,7 +50,8 @@ Todas: `{ok:true, ...}` o `{ok:false, error:'mensaje amable en español'}`. Erro
 
 | Ruta | Entrada | Salida (además de ok) |
 |---|---|---|
-| `GET /api/contratistas` | — | `nombres: string[]` (activos, orden alfabético sin tildes) |
+| `GET /api/contratistas` | — | `nombres: string[]` (solo `estado = 'activa'` y `activo`, orden alfabético sin tildes) |
+| `POST /api/registro` | ver "Registro propio" abajo (público, sin cookie) | `{ok:true}` (201) |
 | `POST /api/login` | `{nombre, pin}` | `contrato: Resumen` (+ cookie) |
 | `POST /api/logout` | — | — |
 | `GET /api/sesion` | cookie | `contrato: Resumen` (para refrescar tras enviar) |
@@ -76,8 +77,19 @@ La contratista llena y corrige **11 campos de su propio contrato**: `direccion`,
 - La edición del admin (`PUT /api/admin/contratos/[id]`) también anota sus cambios, con `autor:'admin'` (inicio, fin, quién revisa, n.º de contrato, objeto, honorario, valor total, riesgo, riesgo nuevo/desde y activa; nunca cédula, dirección, teléfono, correo, ciudad ni cargo) y nunca con `alerta`.
 - El supervisor los ve en `GET /api/admin/cambios` (ver `docs/ADMIN.md`).
 
+### Registro propio (`POST /api/registro`, público)
+
+Una contratista nueva pide su cuenta desde el celular; **no puede entrar hasta que el supervisor la apruebe** (ver "Solicitudes" en `docs/ADMIN.md`). Código: `src/server/registro.ts`.
+
+- Cuerpo (JSON): `nombre, cedula, direccion, telefono, ciudad, correo?, linea, numeroContrato, cargo, objeto, inicio, fin, honorario, valorTotal, riesgo, revisoNombre, revisoCargo` más el campo trampa `sitio_web`. Todo es obligatorio menos `correo`. Cualquier otra clave (`activo`, `estado`, `riesgoNuevo`...) se ignora.
+- Validación: la del panel (`validarContrato`: cédula 6 a 10 dígitos, fechas reales, `fin >= inicio`, riesgo I a V o 1 a 5, honorario y valor total en pesos, `valorTotal >= honorario`, correo con formato) más el teléfono (7 a 15 dígitos) y los máximos de "Mi contrato" (dirección 150, ciudad 80, cargo 120, objeto 1500, quien revisa 120). Errores: `400 {ok:false, error, campos:{ campo: mensaje }}`.
+- **Nombre y cédula únicos entre TODAS las filas**, pendientes incluidas (el nombre sin tildes ni mayúsculas). Los únicos mensajes que revelan algo: `Ya existe una cuenta con esa cédula. Si es tuya, habla con tu supervisor.` y `Ya existe una cuenta con ese nombre. Si es tuya, habla con tu supervisor.`
+- Crea la fila con `estado = 'pendiente'` y `activo = false`, y anota en `cambios_contrato` (`autor: 'contratista'`, `campo: 'registro'`); esa fila también da la "fecha de solicitud" de la lista del supervisor. Mientras sea pendiente: no sale en `GET /api/contratistas`, no entra (el login responde igual que con un PIN malo), `contratoActivo` da 401 y el panel (`/api/admin/contratos`, `/api/admin/cambios`) no la muestra.
+- Orden de las defensas: 1) **campo trampa** `sitio_web` lleno → no se guarda nada y la ruta responde `201 {ok:true}` igual (no se le da pista al robot ni cuenta contra el límite); 2) **límite por IP**: 5 intentos por hora (cuentan todos los que pasan la trampa, también los que traen errores, para que la ruta no sirva de oráculo de cédulas), con la primera IP de `x-forwarded-for` y la clave `__registro__:<ip>` en `intentos_pin`; el 6.º → `429 Enviaste muchas solicitudes seguidas...`; 3) **tope de 30 solicitudes pendientes** en total → `429 No se pueden recibir más solicitudes por ahora.`; 4) validación e inserción.
+
 ### Pantallas de la contratista para estos datos
 
+- **"¿Eres nueva? Crea tu cuenta"** (botón secundario del paso 1) abre `PasoRegistro.tsx`: tres grupos (Tus datos, Tu contrato con equipo o línea, n.º de contrato, cargo, objeto, fechas, honorario, valor total y riesgo ARL, y Quién revisa tu cuenta), la explicación del PIN (los últimos 4 números de la cédula), campo trampa oculto y "Enviar solicitud". Los errores de `campos` salen junto a cada campo. Al enviar muestra la confirmación "Tu solicitud quedó enviada". Reglas puras y pruebas: `src/components/registro.ts`. El campo reutiliza `CampoFormulario.tsx` (el mismo de "Mis datos del contrato").
 - Tras el login (`Contratista.tsx`), si `perfilCompleto` es `false` se muestra **"Antes de empezar, completa tus datos"** (antes del paso 2, fuera de los 4 pasos, sin barra de progreso) y recién después el paso 2. Manda **todos** los campos con "Guardar y continuar".
 - "Revisar mis datos del contrato" (paso 2) abre el mismo formulario (`PasoMiContrato`, prop `inicial`) con "Guardar cambios": manda solo lo que cambió.
 - Si la respuesta trae `aviso`, se muestra en una franja ámbar bajo el valor total con "Continuar de todas formas"; cualquier edición la quita y se vuelve a guardar. Helpers puros y sus pruebas: `src/components/miContrato.ts`.

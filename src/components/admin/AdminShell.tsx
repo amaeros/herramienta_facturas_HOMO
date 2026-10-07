@@ -4,8 +4,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { alVencerSesion, apiAdmin, MSG_SESION_ADMIN_VENCIDA, textoError } from "./apiAdmin";
+import { alCambiarSolicitudes, alVencerSesion, apiAdmin, MSG_SESION_ADMIN_VENCIDA, textoError } from "./apiAdmin";
 import { YaEntroContext } from "./ConSesion";
+import { textoPendientes } from "./helpers";
 import LoginAdmin from "./LoginAdmin";
 import css from "./admin.module.css";
 
@@ -18,6 +19,7 @@ type Estado =
 const ENLACES = [
   { href: "/admin/cuentas", texto: "Cuentas del mes" },
   { href: "/admin/trabajadoras", texto: "Trabajadoras" },
+  { href: "/admin/solicitudes", texto: "Solicitudes" },
   { href: "/admin/parametros", texto: "Parámetros" },
 ];
 
@@ -31,6 +33,8 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   const [yaEntro, setYaEntro] = useState(false);
   const [intento, setIntento] = useState(0);
   const [saliendo, setSaliendo] = useState(false);
+  const [pendientes, setPendientes] = useState(0);
+  const [versionSolicitudes, setVersionSolicitudes] = useState(0);
   const pathname = usePathname();
   const router = useRouter();
 
@@ -60,6 +64,24 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
       }),
     [],
   );
+
+  // el número junto a "Solicitudes": se cuenta al entrar, al cambiar de pantalla y cuando se aprueba o rechaza una
+  useEffect(() => alCambiarSolicitudes(() => setVersionSolicitudes((n) => n + 1)), []);
+  useEffect(() => {
+    if (estado.tipo !== "dentro") return;
+    let vivo = true;
+    apiAdmin
+      .solicitudes()
+      .then((lista) => {
+        if (vivo) setPendientes(lista.length);
+      })
+      .catch(() => {
+        /* el número es un adorno: si no se pudo contar, la pantalla "Solicitudes" ya muestra el error */
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [estado.tipo, pathname, versionSolicitudes]);
 
   function entro() {
     setEstado({ tipo: "dentro" });
@@ -101,6 +123,12 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
                     aria-current={activo ? "page" : undefined}
                   >
                     {e.texto}
+                    {e.href === "/admin/solicitudes" && pendientes > 0 && (
+                      <>
+                        <span className={css.insignia} aria-hidden="true">{pendientes}</span>
+                        <span className={css.soloLectura}>, {textoPendientes(pendientes)}</span>
+                      </>
+                    )}
                   </Link>
                 );
               })}

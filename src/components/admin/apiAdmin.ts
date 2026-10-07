@@ -45,6 +45,22 @@ export function alVencerSesion(fn: Oyente): () => void {
   };
 }
 
+// --- aviso global de "las solicitudes cambiaron" (para el número junto a "Solicitudes" en la barra) ---
+
+const oyentesSolicitudes = new Set<Oyente>();
+
+/** La barra del panel se suscribe aquí para volver a contar las solicitudes pendientes. */
+export function alCambiarSolicitudes(fn: Oyente): () => void {
+  oyentesSolicitudes.add(fn);
+  return () => {
+    oyentesSolicitudes.delete(fn);
+  };
+}
+
+export function notificarSolicitudes(): void {
+  oyentesSolicitudes.forEach((fn) => fn());
+}
+
 // --- tipos ----------------------------------------------------------------------------------
 
 export interface Contrato {
@@ -143,6 +159,36 @@ export interface CambioContrato {
   alerta: boolean;
   /** Fecha y hora ISO. */
   creado: string;
+}
+
+/** Una solicitud de cuenta pendiente, como sale en la lista (la cédula solo con los últimos 4). */
+export interface Solicitud {
+  id: number;
+  nombre: string;
+  cedulaFinal4: string;
+  linea: string;
+  numeroContrato: string;
+  cargo: string;
+  inicio: string | null;
+  fin: string | null;
+  honorario: number | null;
+  riesgo: string;
+  /** Fecha y hora ISO en que la contratista envió la solicitud ('' si no se sabe). */
+  solicitada: string;
+}
+
+/** Una trabajadora en el resultado de "Cambiar a varias". */
+export interface ResultadoLote {
+  id: number;
+  nombre: string;
+  ok: boolean;
+  error?: string;
+}
+
+export interface RespuestaLote {
+  resultados: ResultadoLote[];
+  aplicadas: number;
+  fallidas: number;
 }
 
 export interface CambioImportacion {
@@ -253,6 +299,23 @@ export function normalizarContrato(raw: Crudo): Contrato {
     revisoCargo: txt(g("revisoCargo")),
     activo: g("activo") !== false,
     cargas: Number(g("cargas")) || 0,
+  };
+}
+
+export function normalizarSolicitud(raw: Crudo): Solicitud {
+  const g = (k: string) => tomar(raw, k);
+  return {
+    id: Number(g("id")),
+    nombre: txt(g("nombre")),
+    cedulaFinal4: txt(g("cedulaFinal4")),
+    linea: txt(g("linea")),
+    numeroContrato: txt(g("numeroContrato")),
+    cargo: txt(g("cargo")),
+    inicio: fechaONull(g("inicio")),
+    fin: fechaONull(g("fin")),
+    honorario: numONull(g("honorario")),
+    riesgo: txt(g("riesgo")),
+    solicitada: txt(g("solicitada")),
   };
 }
 
@@ -368,6 +431,45 @@ export const apiAdmin = {
 
   async borrarContrato(id: number, confirmar?: string): Promise<void> {
     await llamarAdmin(`/api/admin/contratos/${id}`, enJson("DELETE", confirmar ? { confirmar } : {}));
+  },
+
+  /** Cambia la fecha de fin y/o de inicio de varias trabajadoras. Una que falle no frena a las demás. */
+  async lote(ids: number[], cambios: { fin?: string; inicio?: string }): Promise<RespuestaLote> {
+    const r = await llamarAdmin<{ ok: true; resultados?: Crudo[]; aplicadas?: number; fallidas?: number }>(
+      "/api/admin/contratos/lote",
+      enJson("POST", { ids, ...cambios }),
+    );
+    const resultados = (r.resultados ?? []).map((x) => ({
+      id: Number(x.id),
+      nombre: txt(x.nombre),
+      ok: x.ok === true,
+      error: typeof x.error === "string" ? x.error : undefined,
+    }));
+    return { resultados, aplicadas: Number(r.aplicadas) || 0, fallidas: Number(r.fallidas) || 0 };
+  },
+
+  /** Solicitudes de cuenta pendientes (de la más antigua a la más nueva). */
+  async solicitudes(): Promise<Solicitud[]> {
+    const r = await llamarAdmin<{ ok: true; solicitudes: Crudo[] }>("/api/admin/solicitudes");
+    return (r.solicitudes || []).map(normalizarSolicitud);
+  },
+
+  /** Una solicitud con todos sus datos (la cédula completa) para el formulario de revisión. */
+  async solicitud(id: number): Promise<Contrato> {
+    const r = await llamarAdmin<{ ok: true; solicitud: Crudo }>(`/api/admin/solicitudes/${id}`);
+    return normalizarContrato({ ...r.solicitud, cargas: 0 });
+  },
+
+  /** Aprueba la solicitud; manda también lo que el supervisor corrigió en el formulario. */
+  async aprobarSolicitud(id: number, p: ContratoPayload): Promise<Contrato> {
+    const r = await llamarAdmin<{ ok: true; contrato: Crudo }>(`/api/admin/solicitudes/${id}/aprobar`, enJson("POST", p));
+    notificarSolicitudes();
+    return normalizarContrato(r.contrato);
+  },
+
+  async rechazarSolicitud(id: number): Promise<void> {
+    await llamarAdmin(`/api/admin/solicitudes/${id}/rechazar`, { method: "POST" });
+    notificarSolicitudes();
   },
 
   async importar(archivo: File, aplicar: boolean): Promise<ResumenImportacion> {

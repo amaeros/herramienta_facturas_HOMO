@@ -13,6 +13,7 @@ import PasoFinal from "./PasoFinal";
 import PasoLogin from "./PasoLogin";
 import type { FormMiContrato } from "./miContrato";
 import PasoMiContrato from "./PasoMiContrato";
+import PasoRegistro from "./PasoRegistro";
 import PasoVerificar from "./PasoVerificar";
 import Progreso from "./Progreso";
 import type {
@@ -21,7 +22,7 @@ import type {
 } from "./tipos";
 
 /** "perfil" = "Antes de empezar" (primera vez); "contrato" = "Mis datos del contrato" (se abre desde el paso 2). */
-type Pantalla = "login" | "perfil" | "datos" | "contrato" | "cargando" | "verificar" | "final";
+type Pantalla = "login" | "registro" | "perfil" | "datos" | "contrato" | "cargando" | "verificar" | "final";
 
 const DIAS_VACIOS: DiasEstado = { activo: false, n: "", motivo: "" };
 const NOTA_NO_LEYO = "No pudimos leer tu planilla con seguridad. Escribe estos datos como aparecen en tu planilla.";
@@ -437,13 +438,24 @@ export default function Contratista() {
   // ---------------------------------------------------------------- pintar
   return (
     <main className="contenido">
-      {pantalla !== "contrato" && pantalla !== "perfil" && <Progreso paso={pasoActual} />}
+      {pantalla !== "contrato" && pantalla !== "perfil" && pantalla !== "registro" && <Progreso paso={pasoActual} />}
 
       {aviso && (
         <div className={"aviso " + aviso.tipo} role={aviso.tipo === "error" ? "alert" : "status"}>{aviso.msg}</div>
       )}
 
-      {pantalla === "login" && <PasoLogin avisar={avisar} limpiarAviso={limpiarAviso} onEntrar={entrar} />}
+      {pantalla === "login" && (
+        <PasoLogin
+          avisar={avisar}
+          limpiarAviso={limpiarAviso}
+          onEntrar={entrar}
+          onRegistro={() => { setAviso(null); mostrar("registro"); }}
+        />
+      )}
+
+      {pantalla === "registro" && (
+        <PasoRegistro avisar={avisar} limpiarAviso={limpiarAviso} onVolver={() => { setAviso(null); mostrar("login"); }} />
+      )}
 
       {pantalla === "datos" && contrato && mes && (
         <PasoDatos

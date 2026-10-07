@@ -110,7 +110,8 @@ export async function verificarLogin(db: Db, nombre: unknown, pin: unknown, ahor
   const [fila] = await db.select().from(intentosPin).where(eq(intentosPin.clave, clave)).limit(1);
   if (fila?.bloqueadoHasta && fila.bloqueadoHasta.getTime() > ahora.getTime()) throw new ErrorAmable(MSG_BLOQUEO, 429);
 
-  const activos = await db.select().from(contratos).where(eq(contratos.activo, true));
+  // solo entran las cuentas aprobadas (estado 'activa') y no desactivadas; una solicitud pendiente no entra
+  const activos = await db.select().from(contratos).where(and(eq(contratos.activo, true), eq(contratos.estado, 'activa')));
   const buscado = normTxt(n);
   const c = activos.find((x) => normTxt(x.nombre) === buscado) ?? null;
   const real = c ? ultimos4(c.cedula) : '';

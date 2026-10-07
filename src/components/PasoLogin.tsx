@@ -9,12 +9,14 @@ interface Props {
   avisar: (msg: string) => void;
   limpiarAviso: () => void;
   onEntrar: (nombre: string, pin: string) => Promise<void>;
+  /** "¿Eres nueva? Crea tu cuenta": abre el formulario de registro. */
+  onRegistro: () => void;
 }
 
 type Lista = { estado: "cargando" } | { estado: "error" } | { estado: "ok"; nombres: string[] };
 
 /** Paso 1: nombre + PIN (últimos 4 de la cédula). */
-export default function PasoLogin({ avisar, limpiarAviso, onEntrar }: Props) {
+export default function PasoLogin({ avisar, limpiarAviso, onEntrar, onRegistro }: Props) {
   const [lista, setLista] = useState<Lista>({ estado: "cargando" });
   const [intento, setIntento] = useState(0);
   const [nombre, setNombre] = useState("");
@@ -107,6 +109,7 @@ export default function PasoLogin({ avisar, limpiarAviso, onEntrar }: Props) {
         <div className="relleno" aria-hidden="true" />
         <div className="barra-fija">
           <button className="btn" type="submit" disabled={ocupado}>Entrar</button>
+          <button className="btn sec" type="button" onClick={onRegistro} disabled={ocupado}>¿Eres nueva? Crea tu cuenta</button>
         </div>
       </form>
     </section>

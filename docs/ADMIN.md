@@ -17,7 +17,8 @@ Nuevo campo opcional: `linea` (texto, "Línea política pública", viene del Exc
 
 | Ruta | Entrada | Salida |
 |---|---|---|
-| `GET /api/admin/contratos` | — | `contratos: Contrato[]` (todos los campos + `cargas: number`), orden por nombre sin tildes |
+| `GET /api/admin/contratos` | — | `contratos: Contrato[]` (todos los campos + `cargas: number`), orden por nombre sin tildes. **No incluye las solicitudes pendientes** (`estado = 'pendiente'`; esas van en `/api/admin/solicitudes`). `PUT`/`DELETE` sobre una pendiente dan 404 |
+| `POST /api/admin/contratos/lote` | `{ids: number[], fin?, inicio?}` (ver "Cambio en lote") | `resultados: [{id, nombre, ok, error?}]`, `aplicadas`, `fallidas` |
 | `POST /api/admin/contratos` | campos del contrato | `contrato` |
 | `PUT /api/admin/contratos/[id]` | campos del contrato | `contrato` |
 | `DELETE /api/admin/contratos/[id]` | `{confirmar?: string}` | — |
@@ -31,6 +32,40 @@ Validaciones (mensajes amables, en español, indicando el campo):
 - `correo` vacío o con formato de correo.
 - Al guardar un contrato que tiene cargas: recalcular `acumulado` y `pct` de sus cargas (reusar la función del envío). NO re-evaluar el valor de cada mes.
 - Borrar: si tiene 0 cargas, se borra. Si tiene cargas, exige `confirmar` = nombre exacto (sin distinguir tildes/mayúsculas); borra cargas, lecturas y los archivos en Blob de esas cargas, y luego el contrato. Si no coincide → error "Para borrar a X con N cuentas enviadas, escribe su nombre completo. Si solo quieres que no aparezca en el celular, desactívala."
+
+## Solicitudes de cuenta (registro propio de la contratista)
+
+La contratista nueva se registra sola (`POST /api/registro`, ver `docs/ARQUITECTURA.md`) y queda como **solicitud** (`estado = 'pendiente'`, `activo = false`). El supervisor la revisa aquí. Código: `src/server/solicitudes.ts`.
+
+| Ruta | Entrada | Salida |
+|---|---|---|
+| `GET /api/admin/solicitudes` | — | `solicitudes: [{...todos los campos menos la cédula, cedulaFinal4: '…1234', solicitada}]`, solo pendientes, de la más antigua a la más nueva. `solicitada` = fecha ISO en que la envió |
+| `GET /api/admin/solicitudes/[id]` | — | `solicitud: {...todos los campos, cedula completa, solicitada}` (para el formulario de revisión) |
+| `POST /api/admin/solicitudes/[id]/aprobar` | cuerpo opcional con campos corregidos (los del formulario de una trabajadora) | `contrato`. Valida como `PUT /api/admin/contratos/[id]` (lo que no viene se conserva; errores `{ok:false, error, campos}`), la deja `estado = 'activa'` y `activo = true`, y anota en la bitácora (`autor: 'admin'`) lo que corrigió y `aprobada` |
+| `POST /api/admin/solicitudes/[id]/rechazar` | — | — |
+
+- **Rechazar borra la fila** (su bitácora se borra en cascada). Solo actúa sobre solicitudes pendientes: sobre una cuenta ya activa da 404 y no borra nada. Aprobar una que ya no está pendiente también da 404 (`No encontramos esa solicitud...`).
+- Al aprobar se vuelven a revisar nombre y cédula únicos (contra todas las demás filas).
+- La bitácora de una solicitud no sale en "Cambios recientes" hasta que se aprueba; ahí aparecen `registro` ("Envió la solicitud de cuenta", autor la contratista) y `aprobada` ("Aprobó la solicitud de cuenta", autor el supervisor).
+- El importador de Excel no toca solicitudes pendientes: una fila con la cédula de una pendiente sale como error.
+
+## Cambio en lote
+
+`POST /api/admin/contratos/lote` con `{ids: number[], fin?: 'AAAA-MM-DD', inicio?: 'AAAA-MM-DD'}`: cambia la fecha de fin, la de inicio o las dos de varias trabajadoras. **Solo esos dos campos** (cualquier otra clave se ignora). Máximo 100 ids; al menos una de las dos fechas; `fin >= inicio` si vienen las dos (error `{ok:false, error, campos:{ids|fin|inicio}}` y no se toca nada).
+
+- A cada id se le aplica `actualizarContrato` (la misma edición del panel): validaciones contra lo que ya tiene (por ejemplo, un fin anterior a su inicio), bitácora (`autor: 'admin'`) y recálculo de acumulados.
+- Una que falla no frena a las demás. Respuesta: `resultados: [{id, nombre, ok, error?}]` en el orden pedido (sin repetidos), `aplicadas` y `fallidas`. Un id que no existe o es una solicitud pendiente sale con `ok: false` y `No encontramos a esa trabajadora.`
+
+## Otrosí y contrato nuevo (guiados)
+
+No son rutas nuevas: la pantalla arma un `PUT /api/admin/contratos/[id]` completo (lo vigente más lo que cambia), así que quedan en la bitácora y los acumulados se recalculan. Las cuentas ya enviadas conservan su foto del contrato.
+
+| Acción | Qué cambia | Efecto en el acumulado |
+|---|---|---|
+| **Registrar otrosí** | `fin` y/o `valorTotal` (el inicio no cambia) | Sigue sumando desde el inicio del contrato; el % pasa a ser sobre el valor total nuevo |
+| **Registrar contrato nuevo** | `numeroContrato`, `inicio`, `fin`, `honorario`, `valorTotal` y `objeto` | Empieza de cero desde la nueva fecha de inicio (`recalcularAcumulados` solo toca los meses dentro de la vigencia nueva) |
+
+En la pantalla: `fin >= inicio` y `valorTotal >= honorario` se revisan antes de enviar (el servidor repite); en "contrato nuevo", si la fecha de inicio no es posterior al fin del contrato anterior sale un aviso ámbar que no bloquea. Reglas puras y pruebas: `src/components/admin/helpers.ts`.
 
 ## Importar desde el Excel de control
 
@@ -70,9 +105,11 @@ La contratista llena y corrige 11 datos de su contrato desde el celular (`PUT /a
 ## Pantallas (`src/app/admin/**`, componentes en `src/components/admin/**`)
 
 - `/admin` → si no hay sesión, formulario de contraseña; si hay, redirige a `/admin/cuentas`.
-- Barra superior: **Cuentas del mes · Trabajadoras · Parámetros · Salir**.
+- Barra superior: **Cuentas del mes · Trabajadoras · Solicitudes · Parámetros · Salir**. "Solicitudes" lleva al lado el número de solicitudes pendientes (una insignia ámbar; se vuelve a contar al cambiar de pantalla y al aprobar o rechazar).
+- `/admin/solicitudes`: tabla de pendientes (nombre con los últimos 4 de la cédula, equipo o línea, contrato con fechas, fecha de solicitud, estado "Por revisar"). **Revisar** abre en el panel lateral el mismo formulario de una trabajadora, con todos los datos editables y los botones **Aprobar** (manda también lo corregido) y **Rechazar** (con diálogo de confirmación). Sin pendientes: "No hay solicitudes pendientes."
 - `/admin/cuentas`: selector de mes; tabla con semáforo (emoji), nombre, valor, seguridad social (esperada vs declarada), mensaje (expandible), botones **Descargar Excel**, **Ver planilla**, checkbox **Aprobado**, campo **Observación** (guarda al salir del campo, con ✓ de guardado). Debajo: "Faltan por enviar: …".
 - `/admin/trabajadoras`: tabla (nombre, contrato, honorario, riesgo, fechas, activa, n.º cuentas) con buscador; botón **➕ Nueva trabajadora**; por fila **✏️ Editar**, **⏸️ Desactivar/Activar**, **🗑️ Borrar**. Formulario agrupado: *Datos personales* (nombre, cédula, dirección, teléfono, ciudad, correo) · *Contrato* (n.º, objeto, cargo, línea, inicio, fin, honorario, valor total) · *ARL* (riesgo, riesgo nuevo, desde) · *Revisó* (nombre, cargo) · *Activa*. Errores junto al campo. Borrar con diálogo de confirmación (pide escribir el nombre si tiene cuentas).
+  En el panel de edición de una trabajadora hay dos acciones guiadas, **Registrar otrosí** (nueva fecha de fin y nuevo valor total) y **Registrar contrato nuevo** (n.º, fechas, honorario, valor total, objeto); ver "Otrosí y contrato nuevo". En la tabla hay casillas para escoger varias y el botón **Cambiar a varias** (fecha de fin y/o de inicio; ver "Cambio en lote"), que al terminar muestra cuántas se cambiaron y por qué no se cambió alguna.
   Botón **📥 Importar desde Excel**: subir → mostrar la vista previa (crear / actualizar con antes→después / errores) → botón **Aplicar cambios**.
 - `/admin/parametros`: formulario con los valores en porcentaje legible (12,5 %) y SMMLV con puntos.
 - La cédula se muestra completa solo dentro del formulario de edición; en tablas, enmascarada (`…1234`).

@@ -10,7 +10,9 @@
 .marca { display: flex; align-items: center; gap: 10px; min-height: 48px; flex: 1 1 auto; order: 1; }
 .marcaLogo { width: 28px; height: auto; flex: none; }
 .marcaTitulo { font-size: var(--t-sub); font-weight: 700; line-height: 1.2; color: var(--verde-homo); }
-.nav { display: flex; gap: 0 14px; order: 3; flex: 1 0 100%; }
+.nav { display: flex; flex-wrap: wrap; gap: 0 14px; order: 3; flex: 1 0 100%; }
+/* cuatro secciones no caben en una línea a 360 px: pasan a otra línea, pero nunca se parte una palabra */
+.navLink { white-space: nowrap; overflow-wrap: normal; }
 .navLink, .navSalir {
   display: inline-flex; align-items: center; min-height: var(--tactil); padding: 4px 2px;
   font-family: inherit; font-size: 15px; font-weight: 600; color: var(--tinta); text-decoration: none;
@@ -19,6 +21,12 @@
 .navLink:hover, .navSalir:hover { color: var(--verde-homo); border-bottom-color: var(--linea); }
 .navActivo, .navActivo:hover { color: var(--verde-homo); border-bottom-color: var(--verde-homo); }
 .navSalir { order: 2; color: var(--texto-suave); }
+/* el número de solicitudes pendientes junto a "Solicitudes" (ámbar: hay algo por revisar) */
+.insignia {
+  display: inline-block; min-width: 22px; margin-left: 8px; padding: 0 7px; font-size: var(--t-ayuda); font-weight: 700; line-height: 20px;
+  text-align: center; color: var(--ambar); background: var(--ambar-fondo); border: 1.5px solid var(--ambar); border-radius: 12px;
+  font-variant-numeric: tabular-nums;
+}
 @media (min-width: 420px) {
   .nav { gap: 0 22px; }
   .navLink, .navSalir { font-size: var(--t-texto); }
@@ -146,6 +154,10 @@
 .nombreFila { font-weight: 700; }
 .colNombre { min-width: 150px; }
 .nowrap { white-space: nowrap; }
+.colCasilla { width: 56px; }
+.colCasilla .check { min-height: 44px; }
+@media (max-width: 1019px) { .colCasilla { width: auto; } }
+.barraSeleccion { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; min-height: 52px; margin: 0 0 12px; }
 @media (max-width: 1019px) { .colNombre { min-width: 0; } }
 .sub { color: var(--texto-suave); font-size: var(--t-ayuda); font-weight: 400; display: block; }
 .subAlerta { font-weight: 700; }
@@ -213,6 +225,13 @@
 .panelBarra > .btn { flex: 1 1 140px; padding-left: 12px; padding-right: 12px; }
 @media (min-width: 720px) { .panelBarra > .btn { flex: 0 0 auto; padding-left: 20px; padding-right: 20px; } }
 
+/* acciones guiadas del contrato (otrosí, contrato nuevo) y cómo está hoy */
+.accionesContrato { margin: 0 0 8px; padding: 12px 0 14px; border-top: 1px solid var(--linea); border-bottom: 1px solid var(--linea); }
+.vigente { margin: 0 0 20px; border-top: 1px solid var(--linea); }
+.vigente > div { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--linea); }
+.vigente dt { color: var(--texto-suave); font-size: var(--t-ayuda); }
+.vigente dd { margin: 0; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+
 /* ---------- bitácora de cambios ---------- */
 .historial { border-top: 1px solid var(--linea); margin-top: 28px; padding-top: 16px; min-width: 0; }
 .recientes { margin: 0 0 20px; border-top: 1px solid var(--linea); border-bottom: 1px solid var(--linea); }
@@ -235,5 +254,5 @@
 
 .cargandoCaja { padding: 24px 0; color: var(--texto-suave); }
 
-.volver { background: none; border: 0; padding: 8px 0; min-height: var(--tactil); color: var(--verde-homo); font-weight: 600; font-size: var(--t-texto); cursor: pointer; font-family: inherit; text-decoration: underline; margin-bottom: 4px; }
+.volver { flex: none; white-space: nowrap; background: none; border: 0; padding: 8px 0; min-height: var(--tactil); color: var(--verde-homo); font-weight: 600; font-size: var(--t-texto); cursor: pointer; font-family: inherit; text-decoration: underline; margin-bottom: 4px; }
 .encabezadoPagina { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; align-items: flex-end; margin-bottom: 14px; }

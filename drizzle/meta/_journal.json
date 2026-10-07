@@ -36,6 +36,13 @@
       "when": 1791351999029,
       "tag": "0004_cambios_alerta",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791352887943,
+      "tag": "0005_registro_estado",
+      "breakpoints": true
     }
   ]
 }

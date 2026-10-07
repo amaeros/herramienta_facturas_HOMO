@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { AdminError, apiAdmin, textoError, type Contrato } from "./apiAdmin";
 import { CambiosRecientes } from "./Cambios";
+import CambioLote from "./CambioLote";
 import Dialogo from "./Dialogo";
 import FormularioTrabajadora from "./FormularioTrabajadora";
 import ImportarExcel from "./ImportarExcel";
@@ -12,7 +13,7 @@ import { useDatos } from "./useDatos";
 import { fmtFecha } from "../formato";
 import css from "./admin.module.css";
 
-type Vista = { tipo: "lista" } | { tipo: "formulario"; contrato: Contrato | null } | { tipo: "importar" };
+type Vista = { tipo: "lista" } | { tipo: "formulario"; contrato: Contrato | null } | { tipo: "lote" } | { tipo: "importar" };
 type Accion = { tipo: "borrar" | "desactivar"; c: Contrato };
 
 function plural(n: number, uno: string, varios: string): string {
@@ -149,6 +150,8 @@ export default function Trabajadoras() {
   const [ocupadoId, setOcupadoId] = useState<number | null>(null);
   // cada vez que se guarda algo, la lista de cambios recientes se vuelve a pedir
   const [versionCambios, setVersionCambios] = useState(0);
+  // casillas de la tabla (para "Cambiar a varias")
+  const [escogidas, setEscogidas] = useState<Set<number>>(() => new Set());
 
   function volverALista(mensaje: string | null) {
     setVista({ tipo: "lista" });
@@ -189,6 +192,29 @@ export default function Trabajadoras() {
   }
 
   const lista = datos ? filtrarContratos(datos, busqueda) : [];
+  // solo cuentan las que todavía existen en la lista (si se borró alguna, se descarta sola)
+  const seleccion = datos ? datos.filter((c) => escogidas.has(c.id)) : [];
+  const todasVisibles = lista.length > 0 && lista.every((c) => escogidas.has(c.id));
+
+  function alternar(id: number) {
+    setEscogidas((prev) => {
+      const sig = new Set(prev);
+      if (sig.has(id)) sig.delete(id);
+      else sig.add(id);
+      return sig;
+    });
+  }
+
+  function alternarVisibles() {
+    setEscogidas((prev) => {
+      const sig = new Set(prev);
+      for (const c of lista) {
+        if (todasVisibles) sig.delete(c.id);
+        else sig.add(c.id);
+      }
+      return sig;
+    });
+  }
 
   return (
     <div className={css.pagina} role="main">
@@ -243,6 +269,34 @@ export default function Trabajadoras() {
             {busqueda ? `${lista.length} de ${datos.length}` : `${datos.length}`} {plural(datos.length, "trabajadora", "trabajadoras")}
           </p>
 
+          {datos.length > 0 && (
+            <div className={css.barraSeleccion}>
+              {seleccion.length === 0 ? (
+                <p className={css.pista} style={{ margin: 0 }}>
+                  Para cambiar la fecha de fin o de inicio de varias a la vez, escógelas con las casillas de la tabla.
+                </p>
+              ) : (
+                <>
+                  <strong role="status">
+                    {seleccion.length} {plural(seleccion.length, "escogida", "escogidas")}
+                  </strong>
+                  <div className={css.acciones}>
+                    <button
+                      type="button"
+                      className={`${css.btn} ${css.btnChico}`}
+                      onClick={() => { setExito(""); setFallo(""); setVista({ tipo: "lote" }); }}
+                    >
+                      Cambiar a varias
+                    </button>
+                    <button type="button" className={`${css.btn} ${css.btnSec} ${css.btnChico}`} onClick={() => setEscogidas(new Set())}>
+                      Quitar la selección
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
           {lista.length === 0 ? (
             <div className="aviso info">
               {datos.length === 0 ? "Todavía no hay trabajadoras. Toca «Nueva trabajadora» o «Importar desde Excel»." : "No encontramos a nadie con ese nombre."}
@@ -252,6 +306,12 @@ export default function Trabajadoras() {
               <table className={css.tabla}>
                 <thead>
                   <tr>
+                    <th scope="col" className={css.colCasilla}>
+                      <label className={css.check}>
+                        <input type="checkbox" checked={todasVisibles} onChange={alternarVisibles} />
+                        <span className={css.soloLectura}>Escoger a todas las que se ven</span>
+                      </label>
+                    </th>
                     <th scope="col">Nombre</th>
                     <th scope="col">Contrato</th>
                     <th scope="col" className={css.num}>Honorario</th>
@@ -265,6 +325,12 @@ export default function Trabajadoras() {
                 <tbody>
                   {lista.map((c) => (
                     <tr key={c.id} className={c.activo ? css.estOk : `${css.estNeutro} ${css.inactiva}`}>
+                      <td data-label="Escoger" className={css.colCasilla}>
+                        <label className={css.check}>
+                          <input type="checkbox" checked={escogidas.has(c.id)} onChange={() => alternar(c.id)} />
+                          <span className={css.soloLectura}>Escoger a {c.nombre}</span>
+                        </label>
+                      </td>
                       <td data-label="Nombre" className={css.colNombre}>
                         <div className={css.celdaDer}>
                           <span className={css.nombreFila}>{c.nombre}</span>
@@ -335,21 +401,35 @@ export default function Trabajadoras() {
       )}
 
       <PanelLateral
-        abierto={vista.tipo === "formulario"}
-        titulo={vista.tipo === "formulario" && vista.contrato ? `Editar a ${vista.contrato.nombre}` : "Nueva trabajadora"}
+        abierto={vista.tipo === "formulario" || vista.tipo === "lote"}
+        titulo={
+          vista.tipo === "lote" ? "Cambiar a varias" : vista.tipo === "formulario" && vista.contrato ? `Editar a ${vista.contrato.nombre}` : "Nueva trabajadora"
+        }
         onCerrar={() => volverALista(null)}
       >
         {vista.tipo === "formulario" && (
           <FormularioTrabajadora
             inicial={vista.contrato}
             onCancelar={() => volverALista(null)}
-            onGuardado={(c) => {
+            onGuardado={(c, mensaje) => {
               modificar((lista) => {
                 const existe = lista.some((x) => x.id === c.id);
                 const siguiente = existe ? lista.map((x) => (x.id === c.id ? { ...c, cargas: x.cargas } : x)) : [...lista, c];
                 return siguiente.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
               });
-              volverALista(vista.contrato ? `Se guardaron los cambios de ${c.nombre}.` : `${c.nombre} quedó creada.`);
+              volverALista(mensaje ?? (vista.contrato ? `Se guardaron los cambios de ${c.nombre}.` : `${c.nombre} quedó creada.`));
+            }}
+          />
+        )}
+        {vista.tipo === "lote" && (
+          <CambioLote
+            escogidas={seleccion}
+            onTerminar={(huboCambios) => {
+              if (huboCambios) {
+                recargar();
+                setEscogidas(new Set());
+              }
+              volverALista(huboCambios ? "Listo: las fechas quedaron anotadas en el historial de cada trabajadora." : null);
             }}
           />
         )}

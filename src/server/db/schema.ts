@@ -87,9 +87,17 @@ export const contratos = pgTable('contratos', {
   riesgoDesde: date('riesgo_desde', { mode: 'string' }),
   revisoNombre: text('reviso_nombre').notNull().default(''),
   revisoCargo: text('reviso_cargo').notNull().default(''),
+  /** Desactivar (activo = false) no cambia el estado: la cuenta sigue siendo 'activa' pero no entra. */
   activo: boolean('activo').notNull().default(true),
   correo: text('correo').notNull().default(''),
+  /**
+   * 'activa' | 'pendiente' | 'rechazada'. Una solicitud de registro nace 'pendiente' (y con activo = false) hasta que el
+   * supervisor la aprueba. Para entrar hace falta estado = 'activa' Y activo = true.
+   */
+  estado: text('estado').notNull().default('activa'),
 });
+
+export type EstadoContrato = 'activa' | 'pendiente' | 'rechazada';
 
 export const cargas = pgTable(
   'cargas',

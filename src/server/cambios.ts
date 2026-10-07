@@ -2,7 +2,7 @@
 // panel de admin; la lee el supervisor en GET /api/admin/cambios. Ver docs/ADMIN.md.
 // Los datos personales (dirección, teléfono, correo) nunca se guardan: el cambio queda anotado como "(dato personal)".
 
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { fmtFecha, fmtMoney } from '../lib/calc';
 import type { Db } from './db';
 import { cambiosContrato, contratos, type ContratoFila } from './db/schema';
@@ -31,6 +31,9 @@ export const ETIQUETAS_CAMPO: Record<string, string> = {
   riesgoNuevo: 'Riesgo ARL nuevo',
   riesgoDesde: 'Riesgo ARL nuevo desde',
   activo: 'Trabajadora activa',
+  // solicitud de cuenta nueva (registro propio de la contratista, aprobado por el supervisor)
+  registro: 'Solicitud de cuenta',
+  aprobada: 'Solicitud aprobada',
   // los que solo cambia la contratista (los admin no se anotan: ver CAMPOS_AUDITADOS_ADMIN)
   direccion: 'Dirección',
   telefono: 'Teléfono',
@@ -140,7 +143,10 @@ export async function listarCambios(db: Db, contratoIdPedido?: unknown): Promise
     .select({ cambio: cambiosContrato, nombre: contratos.nombre })
     .from(cambiosContrato)
     .innerJoin(contratos, eq(cambiosContrato.contratoId, contratos.id));
-  const filas = await (pedido === '' ? consulta : consulta.where(eq(cambiosContrato.contratoId, Number(pedido))))
+  // las solicitudes pendientes todavía no son trabajadoras: su bitácora aparece cuando se aprueban
+  const soloActivas = eq(contratos.estado, 'activa');
+  const filas = await consulta
+    .where(pedido === '' ? soloActivas : and(soloActivas, eq(cambiosContrato.contratoId, Number(pedido))))
     .orderBy(desc(cambiosContrato.creado), desc(cambiosContrato.id))
     .limit(MAX_CAMBIOS);
   return filas.map(({ cambio: c, nombre }) => ({

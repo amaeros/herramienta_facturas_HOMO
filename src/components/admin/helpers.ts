@@ -1,6 +1,6 @@
 /** Utilidades puras del panel del supervisor (formato, lectura de números, formularios). Sin React. */
 
-import { dinero, labelMes, pad2 } from "../formato";
+import { dinero, fmtFecha, labelMes, pad2 } from "../formato";
 import type { CambioContrato, Contrato, ContratoPayload, Parametros } from "./apiAdmin";
 
 // --- texto ----------------------------------------------------------------------------------
@@ -140,7 +140,10 @@ export function textoAutorCambio(autor: string): string {
  * 'Fecha de fin: de 30/09/2026 a 30/11/2026'. Si antes o después estaban vacíos, lo dice sin "de (vacío)".
  * Los datos personales no se guardan: solo se dice que cambiaron.
  */
-export function lineaCambio(c: Pick<CambioContrato, "etiqueta" | "antes" | "despues">): string {
+export function lineaCambio(c: Pick<CambioContrato, "etiqueta" | "antes" | "despues"> & { campo?: string }): string {
+  // la solicitud de cuenta nueva no es un cambio de valor: se cuenta como evento
+  if (c.campo === "registro") return "Envió la solicitud de cuenta";
+  if (c.campo === "aprobada") return "Aprobó la solicitud de cuenta";
   if (c.antes === DATO_PERSONAL || c.despues === DATO_PERSONAL) return `${c.etiqueta}: se actualizó (el dato no se guarda aquí)`;
   const antesVacio = !c.antes || c.antes === SIN_VALOR;
   const despuesVacio = !c.despues || c.despues === SIN_VALOR;
@@ -312,6 +315,125 @@ export function filtrarContratos(lista: Contrato[], busqueda: string): Contrato[
   const q = normalizarTexto(busqueda);
   if (!q) return lista;
   return lista.filter((c) => normalizarTexto([c.nombre, c.numeroContrato, c.cargo, c.linea].join(" ")).includes(q));
+}
+
+// --- solicitudes de cuenta ------------------------------------------------------------------
+
+/** '2026-10-07T15:04:00Z' -> '07/10/2026' (fecha en Bogotá); '' si no se sabe. */
+export function fmtFechaSolicitud(iso: string | null | undefined): string {
+  const d = new Date(String(iso ?? ""));
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("es-CO", { timeZone: "America/Bogota", day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+/** "1 solicitud pendiente", "3 solicitudes pendientes" (para el lector de pantalla y el encabezado). */
+export function textoPendientes(n: number): string {
+  return n === 1 ? "1 solicitud pendiente" : `${n} solicitudes pendientes`;
+}
+
+// --- cambios guiados del contrato (otrosí y contrato nuevo) --------------------------------------
+
+export type CampoGuiado = "fin" | "valorTotal" | "numeroContrato" | "inicio" | "honorario" | "objeto";
+export type ErroresGuiado = Partial<Record<CampoGuiado, string>>;
+
+export interface FormOtrosi {
+  fin: string;
+  valorTotal: string;
+}
+
+export interface FormContratoNuevo {
+  numeroContrato: string;
+  inicio: string;
+  fin: string;
+  honorario: string;
+  valorTotal: string;
+  objeto: string;
+}
+
+/** El otrosí parte de lo vigente: la persona cambia lo que cambió (la prórroga, la adición o las dos). */
+export function formOtrosiInicial(c: Pick<Contrato, "fin" | "valorTotal">): FormOtrosi {
+  return { fin: c.fin ?? "", valorTotal: puntos(c.valorTotal) };
+}
+
+/** El contrato nuevo parte en blanco, salvo el honorario y el objeto, que casi siempre se repiten. */
+export function formContratoNuevoInicial(c: Pick<Contrato, "honorario" | "objeto">): FormContratoNuevo {
+  return { numeroContrato: "", inicio: "", fin: "", honorario: puntos(c.honorario), valorTotal: "", objeto: c.objeto };
+}
+
+const MSG_VALOR_TOTAL = "Escribe el valor total del contrato en pesos. Ejemplo: 64.566.000";
+
+/** fin >= inicio del contrato y valor total >= honorario. Solo revisa lo que se puede revisar sin el servidor. */
+export function validarOtrosi(f: FormOtrosi, c: Pick<Contrato, "inicio" | "fin" | "honorario" | "valorTotal">): ErroresGuiado {
+  const e: ErroresGuiado = {};
+  if (!f.fin) e.fin = "Escribe la nueva fecha de fin.";
+  else if (c.inicio && f.fin < c.inicio) e.fin = "La fecha de fin no puede ser anterior a la de inicio del contrato.";
+  const vt = parseEntero(f.valorTotal);
+  if (!f.valorTotal.trim()) e.valorTotal = "Escribe el nuevo valor total del contrato.";
+  else if (vt === null || vt <= 0) e.valorTotal = MSG_VALOR_TOTAL;
+  else if (c.honorario !== null && vt < c.honorario) e.valorTotal = "El valor total no puede ser menor que el honorario mensual.";
+  if (!e.fin && !e.valorTotal && f.fin === (c.fin ?? "") && vt === c.valorTotal) {
+    e.fin = "Cambia la fecha de fin, el valor total o los dos: ahora mismo es igual a lo que ya tiene.";
+  }
+  return e;
+}
+
+export function validarContratoNuevo(f: FormContratoNuevo): ErroresGuiado {
+  const e: ErroresGuiado = {};
+  if (!f.numeroContrato.trim()) e.numeroContrato = "Escribe el número del contrato nuevo.";
+  if (!f.inicio) e.inicio = "Escribe la fecha de inicio del contrato nuevo.";
+  if (!f.fin) e.fin = "Escribe la fecha de fin del contrato nuevo.";
+  else if (f.inicio && f.fin < f.inicio) e.fin = "La fecha de fin no puede ser anterior a la de inicio.";
+  const hono = parseEntero(f.honorario);
+  if (!f.honorario.trim()) e.honorario = "Escribe el honorario mensual.";
+  else if (hono === null || hono <= 0) e.honorario = "Escribe el honorario mensual en pesos. Ejemplo: 7.174.000";
+  const vt = parseEntero(f.valorTotal);
+  if (!f.valorTotal.trim()) e.valorTotal = "Escribe el valor total del contrato.";
+  else if (vt === null || vt <= 0) e.valorTotal = MSG_VALOR_TOTAL;
+  else if (hono !== null && hono > 0 && vt < hono) e.valorTotal = "El valor total no puede ser menor que el honorario mensual.";
+  return e;
+}
+
+/**
+ * Aviso (no bloquea) si la fecha de inicio del contrato nuevo no es posterior al fin del anterior: lo normal es que el
+ * contrato nuevo empiece después. '' si todo está bien o si falta algún dato.
+ */
+export function avisoInicioContratoNuevo(inicio: string, finAnterior: string | null | undefined): string {
+  if (!inicio || !finAnterior || inicio > finAnterior) return "";
+  return `Esta fecha no es posterior al fin del contrato anterior (${fmtFecha(finAnterior)}). Si es correcto, puedes seguir.`;
+}
+
+/** Lo que se manda a la edición del panel para un otrosí: lo vigente más la fecha de fin y el valor total nuevos. */
+export function payloadOtrosi(c: Contrato, f: FormOtrosi): ContratoPayload {
+  return payloadDeContrato(c, { fin: f.fin, valorTotal: parseEntero(f.valorTotal) });
+}
+
+/** Lo que se manda para un contrato nuevo: el n.º, las fechas, el honorario, el valor total y el objeto; lo demás se conserva. */
+export function payloadContratoNuevo(c: Contrato, f: FormContratoNuevo): ContratoPayload {
+  return payloadDeContrato(c, {
+    numeroContrato: f.numeroContrato.trim(),
+    inicio: f.inicio,
+    fin: f.fin,
+    honorario: parseEntero(f.honorario),
+    valorTotal: parseEntero(f.valorTotal),
+    objeto: f.objeto.trim(),
+  });
+}
+
+/** Errores por campo del servidor -> errores del formulario guiado (ignora campos que no están en la pantalla). */
+export function erroresGuiadoDeCampos(campos: Record<string, string> | undefined): ErroresGuiado {
+  const validos: CampoGuiado[] = ["fin", "valorTotal", "numeroContrato", "inicio", "honorario", "objeto"];
+  const out: ErroresGuiado = {};
+  for (const [k, v] of Object.entries(campos ?? {})) if ((validos as string[]).includes(k)) out[k as CampoGuiado] = v;
+  return out;
+}
+
+// --- cambio en lote -------------------------------------------------------------------------
+
+/** "Se cambiaron las fechas de 3 de 4 trabajadoras." (con singular y plural). */
+export function resumenLote(aplicadas: number, total: number): string {
+  if (aplicadas === 0) return total === 1 ? "No se pudo cambiar a la trabajadora." : "No se pudo cambiar a ninguna trabajadora.";
+  if (aplicadas === total) return total === 1 ? "Se cambió 1 trabajadora." : `Se cambiaron las ${total} trabajadoras.`;
+  return `Se cambiaron ${aplicadas} de ${total} trabajadoras.`;
 }
 
 // --- importación ----------------------------------------------------------------------------

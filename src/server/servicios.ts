@@ -166,7 +166,7 @@ export async function cargarParametros(db: Db): Promise<Parametros> {
 /** El contrato de la sesión: debe existir y estar activo; si no, la sesión ya no sirve. */
 export async function contratoActivo(db: Db, contratoId: number): Promise<ContratoFila> {
   const [c] = await db.select().from(contratos).where(eq(contratos.id, contratoId)).limit(1);
-  if (!c || !c.activo) throw new ErrorAmable(MENSAJE_SESION, 401);
+  if (!c || !c.activo || c.estado !== 'activa') throw new ErrorAmable(MENSAJE_SESION, 401);
   return c;
 }
 
@@ -185,9 +185,12 @@ function validarHonorario(c: ContratoFila): void {
 }
 
 // =================================================================== contratistas y resumen
-/** Nombres de contratistas activas, ordenados sin tildes. Solo nombres: nada de datos personales. */
+/** Nombres de contratistas activas y aprobadas, ordenados sin tildes. Solo nombres: nada de datos personales. */
 export async function listarContratistas(deps: Deps): Promise<string[]> {
-  const filas = await deps.db.select({ nombre: contratos.nombre }).from(contratos).where(eq(contratos.activo, true));
+  const filas = await deps.db
+    .select({ nombre: contratos.nombre })
+    .from(contratos)
+    .where(and(eq(contratos.activo, true), eq(contratos.estado, 'activa')));
   return filas
     .map((f) => f.nombre)
     .sort((a, b) => {

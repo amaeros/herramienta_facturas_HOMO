@@ -1,7 +1,7 @@
 /** Utilidades puras del panel del supervisor (formato, lectura de números, formularios). Sin React. */
 
 import { dinero, labelMes, pad2 } from "../formato";
-import type { Contrato, ContratoPayload, Parametros } from "./apiAdmin";
+import type { CambioContrato, Contrato, ContratoPayload, Parametros } from "./apiAdmin";
 
 // --- texto ----------------------------------------------------------------------------------
 
@@ -112,6 +112,39 @@ export function fmtFechaHora(iso: string | null | undefined): string {
   const d = new Date(String(iso ?? ""));
   if (isNaN(d.getTime())) return "—";
   return d.toLocaleString("es-CO", { timeZone: "America/Bogota", dateStyle: "short", timeStyle: "short" });
+}
+
+// --- bitácora de cambios --------------------------------------------------------------------
+
+/** '2026-10-07T15:04:00Z' -> '07/10/2026, 10:04 a. m.' (hora de Bogotá, año completo). */
+export function fmtFechaHoraCambio(iso: string | null | undefined): string {
+  const d = new Date(String(iso ?? ""));
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleString("es-CO", {
+    timeZone: "America/Bogota", day: "2-digit", month: "2-digit", year: "numeric", hour: "numeric", minute: "2-digit",
+  });
+}
+
+const SIN_VALOR = "(vacío)";
+
+/** Quién hizo el cambio, en palabras. */
+export function textoAutorCambio(autor: string): string {
+  return autor === "contratista" ? "La contratista" : "Supervisor";
+}
+
+/** 'Fecha de fin: de 30/09/2026 a 30/11/2026'. Si antes o después estaban vacíos, lo dice sin "de (vacío)". */
+export function lineaCambio(c: Pick<CambioContrato, "etiqueta" | "antes" | "despues">): string {
+  const antesVacio = !c.antes || c.antes === SIN_VALOR;
+  const despuesVacio = !c.despues || c.despues === SIN_VALOR;
+  if (antesVacio && despuesVacio) return `${c.etiqueta}: cambió`;
+  if (antesVacio) return `${c.etiqueta}: ahora es ${c.despues}`;
+  if (despuesVacio) return `${c.etiqueta}: se borró ${c.antes}`;
+  return `${c.etiqueta}: de ${c.antes} a ${c.despues}`;
+}
+
+/** Cuántos de estos cambios los hizo la contratista. */
+export function contarDeContratistas(lista: Pick<CambioContrato, "autor">[]): number {
+  return lista.filter((c) => c.autor === "contratista").length;
 }
 
 export function etiquetaLectura(l: string): string {

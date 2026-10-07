@@ -2,7 +2,7 @@
 
 import type { ChangeEvent } from "react";
 import { MAX_BYTES } from "./archivos";
-import { fmtMoney, tituloNombre } from "./formato";
+import { fmtFecha, fmtMoney, tituloNombre } from "./formato";
 import Hoja, { type HojaDatos } from "./Hoja";
 import type { MesInfo, Resumen } from "./tipos";
 
@@ -29,10 +29,11 @@ interface Props {
   onDias: (d: DiasEstado) => void;
   onArchivo: (file: File) => void;
   onSalir: () => void;
+  onMiContrato: () => void;
 }
 
 /** Paso 2: mes a cobrar, periodo, días a mano (opcional) y la planilla. La hoja muestra mes, periodo y valor. */
-export default function PasoDatos({ contrato: c, mes, periodo, dias, hoja, onMes, onPeriodo, onDias, onArchivo, onSalir }: Props) {
+export default function PasoDatos({ contrato: c, mes, periodo, dias, hoja, onMes, onPeriodo, onDias, onArchivo, onSalir, onMiContrato }: Props) {
   const n = Number(dias.n);
   const calculoDias =
     n >= 1 && n <= 30 && Math.floor(n) === n
@@ -52,7 +53,9 @@ export default function PasoDatos({ contrato: c, mes, periodo, dias, hoja, onMes
       <dl className="renglones">
         <div className="renglon"><dt>Contrato n.º</dt><dd className="cifra">{c.numeroContrato || "—"}</dd></div>
         <div className="renglon"><dt>Honorario mensual</dt><dd className="cifra">{fmtMoney(c.honorario)}</dd></div>
+        <div className="renglon"><dt>Vigencia</dt><dd className="cifra">{fmtFecha(c.inicio)} a {fmtFecha(c.fin)}</dd></div>
       </dl>
+      <button type="button" className="link" onClick={onMiContrato}>Revisar mis datos del contrato</button>
 
       <div className="seccion">
         <div className="campo">

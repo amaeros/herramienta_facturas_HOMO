@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { AdminError, apiAdmin, textoError, type Contrato } from "./apiAdmin";
+import { CambiosRecientes } from "./Cambios";
 import Dialogo from "./Dialogo";
 import FormularioTrabajadora from "./FormularioTrabajadora";
 import ImportarExcel from "./ImportarExcel";
@@ -146,10 +147,15 @@ export default function Trabajadoras() {
   const [fallo, setFallo] = useState("");
   const [accion, setAccion] = useState<Accion | null>(null);
   const [ocupadoId, setOcupadoId] = useState<number | null>(null);
+  // cada vez que se guarda algo, la lista de cambios recientes se vuelve a pedir
+  const [versionCambios, setVersionCambios] = useState(0);
 
   function volverALista(mensaje: string | null) {
     setVista({ tipo: "lista" });
-    if (mensaje) setExito(mensaje);
+    if (mensaje) {
+      setExito(mensaje);
+      setVersionCambios((v) => v + 1);
+    }
   }
 
   async function cambiarActivo(c: Contrato, activo: boolean): Promise<string> {
@@ -159,6 +165,7 @@ export default function Trabajadoras() {
       const nuevo = await apiAdmin.editarContrato(c.id, payloadDeContrato(c, { activo }));
       modificar((lista) => lista.map((x) => (x.id === nuevo.id ? { ...nuevo, cargas: x.cargas } : x)));
       setExito(activo ? `${c.nombre} quedó activa.` : `${c.nombre} quedó desactivada.`);
+      setVersionCambios((v) => v + 1);
       setAccion(null);
       return "";
     } catch (e) {
@@ -214,6 +221,8 @@ export default function Trabajadoras() {
           <button type="button" className={css.btnLink} onClick={recargar}>Intentar de nuevo</button>
         </div>
       )}
+
+      <CambiosRecientes version={versionCambios} />
 
       {datos && (
         <>

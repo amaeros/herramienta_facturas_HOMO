@@ -6,7 +6,8 @@
   --tinta: #17302a;
   --fondo: #eef2ef;
   --papel: #ffffff;
-  --linea: #c9d3ce;
+  --linea: #c9d3ce; /* solo renglones y divisores */
+  --borde-campo: #76887f; /* borde de campos, selectores y botones de control: 3,75:1 sobre blanco, 3,32:1 sobre --fondo */
   --ambar: #9a5b00;
   --ambar-fondo: #fff4dc;
   --rojo: #b3261e;
@@ -18,7 +19,7 @@
   --radio-hoja: 4px;
   --radio-campo: 10px;
   --sombra-hoja: 0 1px 0 #c9d3ce, 0 8px 24px -16px rgba(23, 48, 42, 0.35);
-  --borde-campo: 1.5px solid var(--linea);
+  --borde-control: 1.5px solid var(--borde-campo);
   --foco: 3px solid var(--verde-logo);
   --tactil: 48px;
 
@@ -132,7 +133,7 @@ input[type=search] {
   line-height: 1.4;
   color: var(--tinta);
   background: var(--papel);
-  border: var(--borde-campo);
+  border: var(--borde-control);
   border-radius: var(--radio-campo);
 }
 textarea { resize: vertical; min-height: 96px; }

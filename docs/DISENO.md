@@ -35,7 +35,8 @@ En el panel del supervisor no hay hoja. Ahí el protagonista es la **tabla del m
 | `--tinta` | `#17302A` | texto (negro verdoso, no #111) |
 | `--fondo` | `#EEF2EF` | fondo de la app (gris verdoso frío, **no crema**) |
 | `--papel` | `#FFFFFF` | la hoja y los campos |
-| `--linea` | `#C9D3CE` | renglones, bordes de campos |
+| `--linea` | `#C9D3CE` | renglones y divisores (nunca bordes de campos: no llega a 3:1) |
+| `--borde-campo` | `#76887F` | borde de campos, selectores y botones de control. Contraste 3,75:1 sobre `--papel` y 3,32:1 sobre `--fondo` (mínimo 3:1 para componentes de interfaz) |
 | `--ambar` | `#9A5B00` (fondo `#FFF4DC`) | estado "Revisa esto" |
 | `--rojo` | `#B3261E` (fondo `#FDECEA`) | estado "Hay un problema" y errores |
 | `--texto-suave` | `#4F625B` | ayudas y textos secundarios (contraste ≥ 4.5:1 sobre `--fondo`) |
@@ -59,7 +60,7 @@ En el panel del supervisor no hay hoja. Ahí el protagonista es la **tabla del m
 ### Forma
 
 - La hoja lleva radio de 4 px y una sombra de papel muy leve (`0 1px 0 #C9D3CE, 0 8px 24px -16px rgba(23,48,42,.35)`). **Es el único elemento con sombra.**
-- Campos y botones: radio de 10 px, borde de 1.5 px `--linea`, con foco de 3 px `--verde-logo`.
+- Campos y botones: radio de 10 px, borde de 1.5 px `--borde-campo`, con foco de 3 px `--verde-logo`.
 - Las secciones se separan con espacio y renglones finos, no con tarjetas.
 - Área táctil mínima de 48 px. Botón principal de ancho completo y fijo abajo en celular, con el área segura del teléfono respetada.
 

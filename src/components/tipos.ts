@@ -24,6 +24,23 @@ export interface Resumen {
   mesDefault: string;
 }
 
+/** Los 4 datos del contrato que la contratista puede cambiar (GET y PUT /api/mi-contrato). Fechas 'AAAA-MM-DD' o ''. */
+export interface DatosMiContrato {
+  inicio: string;
+  fin: string;
+  revisoNombre: string;
+  revisoCargo: string;
+}
+
+export interface RespMiContrato {
+  ok: true;
+  datos: DatosMiContrato;
+}
+
+export interface RespGuardarMiContrato extends RespMiContrato {
+  contrato: Resumen;
+}
+
 /** Datos de la planilla principal tal como van a /api/evaluar y /api/enviar. */
 export interface Datos {
   numero: string;

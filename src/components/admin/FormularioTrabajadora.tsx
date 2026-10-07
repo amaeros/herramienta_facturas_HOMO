@@ -6,6 +6,7 @@ import {
   campoDeMensaje, erroresDeCampos, formDeContrato, formVacio, NIVELES_RIESGO, parseEntero, payloadDeForm, puntos, validarForm,
   type CampoForm, type ErroresForm, type FormContrato,
 } from "./helpers";
+import { HistorialCambios } from "./Cambios";
 import css from "./admin.module.css";
 
 interface CampoProps {
@@ -238,6 +239,8 @@ export default function FormularioTrabajadora({ inicial, onGuardado, onCancelar 
             <span>Activa (aparece en la lista del celular)</span>
           </label>
         </fieldset>
+
+        {inicial && <HistorialCambios contratoId={inicial.id} />}
 
         <div className={css.panelBarra}>
           <button type="submit" className={css.btn} disabled={ocupado}>{ocupado ? "Guardando…" : "Guardar"}</button>

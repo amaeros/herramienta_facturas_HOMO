@@ -8,11 +8,14 @@ export class ApiError extends Error {
   readonly status: number;
   /** true si el mensaje viene del servidor (o es nuestro) y se le puede mostrar tal cual a la contratista */
   readonly amable: boolean;
-  constructor(mensaje: string, status: number, amable: boolean) {
+  /** Errores por campo ({ fin: "mensaje" }) cuando el servidor los manda. */
+  readonly campos?: Record<string, string>;
+  constructor(mensaje: string, status: number, amable: boolean, campos?: Record<string, string>) {
     super(mensaje);
     this.name = "ApiError";
     this.status = status;
     this.amable = amable;
+    this.campos = campos;
   }
 }
 
@@ -46,7 +49,7 @@ export async function llamar<T>(url: string, init: RequestInit = {}): Promise<T>
   } catch {
     /* respuesta que no es JSON (por ejemplo, un error de la plataforma) */
   }
-  const obj = data && typeof data === "object" ? (data as { ok?: boolean; error?: string }) : null;
+  const obj = data && typeof data === "object" ? (data as { ok?: boolean; error?: string; campos?: unknown }) : null;
 
   if (res.status === 401) {
     throw new ApiError((obj && obj.error) || MSG_SESION_VENCIDA, 401, true);
@@ -58,14 +61,29 @@ export async function llamar<T>(url: string, init: RequestInit = {}): Promise<T>
     throw new ApiError("No pudimos completar la acción. Intenta de nuevo.", res.status, true);
   }
   if (obj.ok === false || !res.ok) {
-    throw new ApiError(obj.error || "No pudimos completar la acción. Intenta de nuevo.", res.status, true);
+    throw new ApiError(obj.error || "No pudimos completar la acción. Intenta de nuevo.", res.status, true, camposDeError(obj.campos));
   }
   return data as T;
+}
+
+function camposDeError(c: unknown): Record<string, string> | undefined {
+  if (!c || typeof c !== "object") return undefined;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(c as Record<string, unknown>)) if (typeof v === "string") out[k] = v;
+  return Object.keys(out).length ? out : undefined;
 }
 
 export function postJson<T>(url: string, cuerpo: unknown): Promise<T> {
   return llamar<T>(url, {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(cuerpo),
+  });
+}
+
+export function putJson<T>(url: string, cuerpo: unknown): Promise<T> {
+  return llamar<T>(url, {
+    method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(cuerpo),
   });

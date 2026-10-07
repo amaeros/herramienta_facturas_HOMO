@@ -129,6 +129,20 @@ export interface Parametros {
   toleranciaSs: number;
 }
 
+/** Una fila de la bitácora de cambios al contrato (antes y después ya vienen como texto legible). */
+export interface CambioContrato {
+  id: number;
+  contratoId: number;
+  nombre: string;
+  autor: "contratista" | "admin";
+  campo: string;
+  etiqueta: string;
+  antes: string;
+  despues: string;
+  /** Fecha y hora ISO. */
+  creado: string;
+}
+
 export interface CambioImportacion {
   campo: string;
   etiqueta?: string;
@@ -275,6 +289,22 @@ export function normalizarCarga(raw: Crudo): Carga {
   };
 }
 
+export function normalizarCambio(raw: Crudo): CambioContrato {
+  const g = (k: string) => tomar(raw, k);
+  const campo = txt(g("campo"));
+  return {
+    id: Number(g("id")),
+    contratoId: Number(g("contratoId")),
+    nombre: txt(g("nombre")),
+    autor: txt(g("autor")) === "contratista" ? "contratista" : "admin",
+    campo,
+    etiqueta: txt(g("etiqueta")) || campo,
+    antes: txt(g("antes")),
+    despues: txt(g("despues")),
+    creado: txt(g("creado")),
+  };
+}
+
 /** La spec dice "la fila": puede venir como `{ok, parametros:{...}}` o con los campos sueltos. */
 export function extraerParametros(r: unknown): Parametros {
   const base = (r && typeof r === "object" ? (r as Crudo) : {}) as Crudo;
@@ -360,6 +390,13 @@ export const apiAdmin = {
   async actualizarCarga(id: number, cambios: { aprobado?: boolean; observacion?: string }): Promise<Carga> {
     const r = await llamarAdmin<{ ok: true; carga: Crudo }>(`/api/admin/cargas/${id}`, enJson("PATCH", cambios));
     return normalizarCarga(r.carga);
+  },
+
+  /** Cambios al contrato, del más nuevo al más viejo. Con `contratoId`, solo los de esa trabajadora; sin él, los últimos de todas. */
+  async cambios(contratoId?: number): Promise<CambioContrato[]> {
+    const q = contratoId === undefined ? "" : `?contratoId=${encodeURIComponent(String(contratoId))}`;
+    const r = await llamarAdmin<{ ok: true; cambios: Crudo[] }>(`/api/admin/cambios${q}`);
+    return (r.cambios || []).map(normalizarCambio);
   },
 
   async parametros(): Promise<Parametros> {

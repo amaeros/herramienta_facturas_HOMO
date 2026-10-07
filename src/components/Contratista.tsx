@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
-import { esSesionVencida, llamar, mensajeDeError, postJson } from "./api";
+import { esSesionVencida, llamar, mensajeDeError, postJson, putJson } from "./api";
 import { cargarPdfjs, MSG_FOTO, MSG_PESO, prepararArchivo, problemaArchivo } from "./archivos";
 import Cargando from "./Cargando";
 import { DEBOUNCE_EVALUAR_MS } from "./constantes";
@@ -11,13 +11,15 @@ import { datosDeInputs, faltaAlgo, INPUTS_VACIOS, inputsDeLectura, type Inputs }
 import PasoDatos, { type DiasEstado, type PeriodoEstado } from "./PasoDatos";
 import PasoFinal from "./PasoFinal";
 import PasoLogin from "./PasoLogin";
+import PasoMiContrato from "./PasoMiContrato";
 import PasoVerificar from "./PasoVerificar";
 import Progreso from "./Progreso";
 import type {
-  Adicional, DiasManualPayload, Evaluacion, MesInfo, RespEnviar, RespEvaluar, RespLogin, RespPlanilla, Resumen,
+  Adicional, DatosMiContrato, DiasManualPayload, Evaluacion, MesInfo, RespEnviar, RespEvaluar, RespGuardarMiContrato,
+  RespLogin, RespMiContrato, RespPlanilla, Resumen,
 } from "./tipos";
 
-type Pantalla = "login" | "datos" | "cargando" | "verificar" | "final";
+type Pantalla = "login" | "datos" | "contrato" | "cargando" | "verificar" | "final";
 
 const DIAS_VACIOS: DiasEstado = { activo: false, n: "", motivo: "" };
 const NOTA_NO_LEYO = "No pudimos leer tu planilla con seguridad. Escribe estos datos como aparecen en tu planilla.";
@@ -167,6 +169,28 @@ export default function Contratista() {
       /* da igual: se borra todo de este lado */
     }
     volverALogin();
+  }
+
+  // ---------------------------------------------------------------- mis datos del contrato (se abre desde el paso 2)
+  async function cargarMiContrato(): Promise<DatosMiContrato> {
+    return (await api<RespMiContrato>("/api/mi-contrato")).datos;
+  }
+
+  async function guardarMiContrato(cambios: Partial<DatosMiContrato>): Promise<Resumen> {
+    try {
+      return (await putJson<RespGuardarMiContrato>("/api/mi-contrato", cambios)).contrato;
+    } catch (e) {
+      if (esSesionVencida(e)) volverALogin(mensajeDeError(e));
+      throw e;
+    }
+  }
+
+  /** Con el contrato ya guardado: se refresca la lista de meses (como tras entrar) y se vuelve al paso 2. */
+  function alGuardarMiContrato(c: Resumen) {
+    setContrato(c);
+    empezarMes(c, c.meses.some((m) => m.key === mesKey) ? mesKey : c.mesDefault);
+    avisar("Cambios guardados", "info");
+    mostrar("datos");
   }
 
   // ---------------------------------------------------------------- paso 2
@@ -408,10 +432,10 @@ export default function Contratista() {
   // ---------------------------------------------------------------- pintar
   return (
     <main className="contenido">
-      <Progreso paso={pasoActual} />
+      {pantalla !== "contrato" && <Progreso paso={pasoActual} />}
 
       {aviso && (
-        <div className={"aviso " + aviso.tipo} role="alert">{aviso.msg}</div>
+        <div className={"aviso " + aviso.tipo} role={aviso.tipo === "error" ? "alert" : "status"}>{aviso.msg}</div>
       )}
 
       {pantalla === "login" && <PasoLogin avisar={avisar} limpiarAviso={limpiarAviso} onEntrar={entrar} />}
@@ -428,6 +452,18 @@ export default function Contratista() {
           onDias={setDias}
           onArchivo={alElegirArchivo}
           onSalir={salir}
+          onMiContrato={() => { setAviso(null); mostrar("contrato"); }}
+        />
+      )}
+
+      {pantalla === "contrato" && contrato && (
+        <PasoMiContrato
+          cargar={cargarMiContrato}
+          guardar={guardarMiContrato}
+          avisar={avisar}
+          limpiarAviso={limpiarAviso}
+          onVolver={() => { setAviso(null); mostrar("datos"); }}
+          onGuardado={alGuardarMiContrato}
         />
       )}
 

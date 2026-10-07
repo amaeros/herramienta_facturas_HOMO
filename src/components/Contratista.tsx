@@ -1,0 +1,413 @@
+"use client";
+
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
+import { esSesionVencida, llamar, mensajeDeError, postJson } from "./api";
+import { cargarPdfjs, MSG_FOTO, MSG_PESO, prepararArchivo, problemaArchivo } from "./archivos";
+import Cargando from "./Cargando";
+import { DEBOUNCE_EVALUAR_MS } from "./constantes";
+import { datosDeInputs, faltaAlgo, INPUTS_VACIOS, inputsDeLectura, type Inputs } from "./lectura";
+import PasoDatos, { type DiasEstado, type PeriodoEstado } from "./PasoDatos";
+import PasoFinal from "./PasoFinal";
+import PasoLogin from "./PasoLogin";
+import PasoVerificar from "./PasoVerificar";
+import type {
+  Adicional, DiasManualPayload, Evaluacion, MesInfo, RespEnviar, RespEvaluar, RespLogin, RespPlanilla, Resumen,
+} from "./tipos";
+
+type Pantalla = "login" | "datos" | "cargando" | "verificar" | "final";
+
+const DIAS_VACIOS: DiasEstado = { activo: false, n: "", motivo: "" };
+const NOTA_NO_LEYO = "No pudimos leer tu planilla con seguridad. Escribe estos datos como aparecen en tu planilla.";
+
+function periodoNormal(m: MesInfo): PeriodoEstado {
+  return { editable: false, inicio: m.inicio, corte: m.corte };
+}
+
+/** Revisa lo que escribió en "días distintos" antes de seguir; devuelve un mensaje si falta algo. */
+function problemaDias(d: DiasEstado): string {
+  if (!d.activo) return "";
+  const n = Number(d.n.trim());
+  if (d.n.trim() === "" || !isFinite(n) || Math.floor(n) !== n || n < 1 || n > 30)
+    return "Escribe los días a cobrar: un número entero entre 1 y 30. O toca «Volver a los días normales».";
+  if (!d.motivo.trim()) return "Escribe el motivo de los días distintos (suspensión, licencia, novedad…).";
+  return "";
+}
+
+export default function Contratista() {
+  const [pantalla, setPantalla] = useState<Pantalla>("login");
+  const [aviso, setAviso] = useState<{ msg: string; tipo: "error" | "info" } | null>(null);
+  const [espera, setEspera] = useState({ titulo: "", texto: "" });
+
+  const [contrato, setContrato] = useState<Resumen | null>(null);
+  const [mesKey, setMesKey] = useState("");
+  const [periodo, setPeriodo] = useState<PeriodoEstado>({ editable: false, inicio: "", corte: "" });
+  const [dias, setDias] = useState<DiasEstado>(DIAS_VACIOS);
+
+  const [tempId, setTempId] = useState("");
+  const [leyo, setLeyo] = useState(false);
+  const [nota, setNota] = useState("");
+  const [inputs, setInputs] = useState<Inputs>(INPUTS_VACIOS);
+  const [edicion, setEdicion] = useState(false);
+  const [sucio, setSucio] = useState(false);
+  const [evaluando, setEvaluando] = useState(false);
+  const [evaluacion, setEvaluacion] = useState<Evaluacion | null>(null);
+  const [adicionales, setAdicionales] = useState<Adicional[]>([]);
+  const [ediciones, setEdiciones] = useState(0);
+  const [final, setFinal] = useState<RespEnviar | null>(null);
+  const [refrescando, setRefrescando] = useState(false);
+
+  // Para descartar respuestas viejas de /api/evaluar: una por petición y otra por cada edición
+  const reqEval = useRef(0);
+  const verEdicion = useRef(0);
+  const ocupado = useRef(false);
+
+  const mes: MesInfo | null = contrato ? contrato.meses.find((m) => m.key === mesKey) ?? contrato.meses[0] ?? null : null;
+
+  // ---------------------------------------------------------------- avisos y navegación
+  const avisar = useCallback((msg: string, tipo: "error" | "info" = "error") => {
+    setAviso({ msg, tipo });
+    window.scrollTo(0, 0);
+  }, []);
+  const limpiarAviso = useCallback(() => setAviso(null), []);
+
+  function mostrar(p: Pantalla) {
+    setPantalla(p);
+    window.scrollTo(0, 0);
+  }
+
+  function esperar(titulo: string, texto: string) {
+    setEspera({ titulo, texto });
+    mostrar("cargando");
+  }
+
+  /** Borra todo lo de la sesión y vuelve al paso 1 (con un mensaje si hace falta). */
+  const volverALogin = useCallback((msg?: string) => {
+    reqEval.current++;
+    verEdicion.current++;
+    ocupado.current = false;
+    setContrato(null);
+    setMesKey("");
+    setPeriodo({ editable: false, inicio: "", corte: "" });
+    setDias(DIAS_VACIOS);
+    setTempId("");
+    setLeyo(false);
+    setNota("");
+    setInputs(INPUTS_VACIOS);
+    setEdicion(false);
+    setSucio(false);
+    setEvaluando(false);
+    setEvaluacion(null);
+    setAdicionales([]);
+    setEdiciones(0);
+    setFinal(null);
+    setRefrescando(false);
+    setAviso(msg ? { msg, tipo: "error" } : null);
+    setPantalla("login");
+    window.scrollTo(0, 0);
+  }, []);
+
+  /** Cualquier 401 de una ruta de la contratista: de vuelta al paso 1 con el mensaje del servidor. */
+  async function api<T>(url: string, init?: RequestInit): Promise<T> {
+    try {
+      return await llamar<T>(url, init);
+    } catch (e) {
+      if (esSesionVencida(e)) volverALogin(mensajeDeError(e));
+      throw e;
+    }
+  }
+
+  async function apiJson<T>(url: string, cuerpo: unknown): Promise<T> {
+    try {
+      return await postJson<T>(url, cuerpo);
+    } catch (e) {
+      if (esSesionVencida(e)) volverALogin(mensajeDeError(e));
+      throw e;
+    }
+  }
+
+  /** Muestra el error en el banner, salvo que ya nos hayamos ido al paso 1 por sesión vencida (ahí el mensaje ya está). */
+  function errorEnBanner(e: unknown) {
+    if (!esSesionVencida(e)) avisar(mensajeDeError(e));
+  }
+
+  // ---------------------------------------------------------------- paso 1 -> 2
+  function empezarMes(c: Resumen, key: string) {
+    const m = c.meses.find((x) => x.key === key) ?? c.meses[0];
+    setMesKey(m ? m.key : "");
+    setPeriodo(m ? periodoNormal(m) : { editable: false, inicio: "", corte: "" });
+    setDias(DIAS_VACIOS);
+    setAdicionales([]);
+  }
+
+  async function entrar(nombre: string, pin: string) {
+    try {
+      const r = await postJson<RespLogin>("/api/login", { nombre, pin });
+      setContrato(r.contrato);
+      empezarMes(r.contrato, r.contrato.mesDefault);
+      setAviso(null);
+      mostrar("datos");
+    } catch (e) {
+      avisar(mensajeDeError(e));
+    }
+  }
+
+  // pdf.js se baja en cuanto la persona entra, para que esté listo cuando suba la planilla (solo en el navegador)
+  useEffect(() => {
+    if (contrato) void cargarPdfjs();
+  }, [contrato]);
+
+  async function salir() {
+    try {
+      await llamar("/api/logout", { method: "POST" });
+    } catch {
+      /* da igual: se borra todo de este lado */
+    }
+    volverALogin();
+  }
+
+  // ---------------------------------------------------------------- paso 2
+  function cambiarMes(key: string) {
+    if (!contrato) return;
+    setAviso(null);
+    empezarMes(contrato, key);
+  }
+
+  function fechasActuales(): { inicio: string; corte: string } {
+    if (periodo.editable && mes) return { inicio: periodo.inicio || mes.inicio, corte: periodo.corte || mes.corte };
+    return { inicio: mes?.inicio ?? "", corte: mes?.corte ?? "" };
+  }
+
+  function diasManualActual(): DiasManualPayload | null {
+    return dias.activo ? { dias: dias.n.trim(), motivo: dias.motivo.trim() } : null;
+  }
+
+  function adicionalesPayload(lista: Adicional[] = adicionales) {
+    return lista.map((a) => ({ numero: a.numero, periodo: a.periodo, valor: a.valor, tempId: a.tempId || "" }));
+  }
+
+  /** Manda el archivo a /api/planilla (multipart) con el texto que sacó pdf.js. */
+  async function subirPlanilla(file: File, esAdicional: boolean): Promise<RespPlanilla> {
+    const listo = await prepararArchivo(file);
+    const f = fechasActuales();
+    const fd = new FormData();
+    fd.append("archivo", listo.archivo, listo.archivo.name);
+    fd.append("texto", listo.texto);
+    fd.append("mes", mesKey);
+    fd.append("fechaInicio", f.inicio);
+    fd.append("fechaCorte", f.corte);
+    fd.append("adicionales", JSON.stringify(esAdicional ? [] : adicionalesPayload()));
+    fd.append("diasManual", JSON.stringify(esAdicional ? null : diasManualActual()));
+    if (esAdicional) fd.append("adicional", "1");
+    return api<RespPlanilla>("/api/planilla", { method: "POST", body: fd });
+  }
+
+  async function alElegirArchivo(file: File) {
+    setAviso(null);
+    const pa = problemaArchivo(file);
+    if (pa) { avisar(pa); return; }
+    if (periodo.editable && (!periodo.inicio || !periodo.corte)) {
+      avisar("Escribe las dos fechas del periodo o vuelve a las fechas normales.");
+      return;
+    }
+    const pd = problemaDias(dias);
+    if (pd) { avisar(pd); return; }
+    esperar("Leyendo tu planilla…", "Esto puede tardar hasta 30 segundos. No cierres esta pantalla.");
+    try {
+      const r = await subirPlanilla(file, false);
+      reqEval.current++;
+      verEdicion.current++;
+      const nuevos = inputsDeLectura(r.lectura);
+      const d = datosDeInputs(nuevos);
+      setTempId(r.tempId);
+      setLeyo(!!r.leyo);
+      setEvaluacion(r.evaluacion || null);
+      setSucio(false);
+      setEvaluando(false);
+      setInputs(nuevos);
+      setEdicion(!r.leyo || faltaAlgo(d));
+      setNota(r.leyo ? "" : NOTA_NO_LEYO);
+      mostrar("verificar");
+    } catch (e) {
+      if (esSesionVencida(e)) return;
+      mostrar("datos");
+      if (e instanceof Error && e.message === MSG_FOTO) avisar("No pudimos abrir la foto. Intenta con otra o sube el PDF.");
+      else if (e instanceof Error && e.message === MSG_PESO) avisar(MSG_PESO);
+      else avisar(mensajeDeError(e));
+    }
+  }
+
+  // ---------------------------------------------------------------- paso 3
+  /** Pide al servidor revisar los datos actuales (principal + adicionales + días a mano) sin guardar nada. */
+  async function evaluarAhora(lista: Adicional[] = adicionales): Promise<void> {
+    const miReq = ++reqEval.current;
+    const miVer = verEdicion.current;
+    const f = fechasActuales();
+    setEvaluando(true);
+    try {
+      const r = await apiJson<RespEvaluar>("/api/evaluar", {
+        mes: mesKey,
+        fechaInicio: f.inicio,
+        fechaCorte: f.corte,
+        datos: datosDeInputs(inputs),
+        adicionales: adicionalesPayload(lista),
+        diasManual: diasManualActual(),
+      });
+      if (miReq !== reqEval.current || miVer !== verEdicion.current) return; // llegó tarde: hay algo más nuevo
+      setEvaluacion(r.evaluacion);
+      setSucio(false);
+    } catch (e) {
+      if (miReq === reqEval.current) setSucio(true); // sin revisión valida no se puede enviar
+      errorEnBanner(e);
+    } finally {
+      if (miReq === reqEval.current) setEvaluando(false);
+    }
+  }
+
+  // Revisión automática: unos instantes después de la última edición
+  const dispararEvaluacion = useEffectEvent(() => { void evaluarAhora(); });
+  useEffect(() => {
+    if (!ediciones) return;
+    const t = setTimeout(() => dispararEvaluacion(), DEBOUNCE_EVALUAR_MS);
+    return () => clearTimeout(t);
+  }, [ediciones]);
+
+  function alEditar(cambio: Partial<Inputs>) {
+    const siguiente = { ...inputs, ...cambio };
+    setInputs(siguiente);
+    // Si solo cambió el formato (por ejemplo '358700' -> '358.700'), no hay nada nuevo que revisar
+    if (JSON.stringify(datosDeInputs(siguiente)) === JSON.stringify(datosDeInputs(inputs))) return;
+    verEdicion.current++;
+    setSucio(true);
+    setEdiciones((n) => n + 1);
+  }
+
+  function corregir() {
+    setEdicion(true);
+    setSucio(false);
+    setTimeout(() => document.getElementById("i-numero")?.focus(), 0);
+  }
+
+  function revisarDeNuevo() {
+    setAviso(null);
+    setEdiciones(0); // cancela la revisión automática pendiente: se hace ya
+    void evaluarAhora();
+  }
+
+  function agregarAdicional(a: Adicional) {
+    const lista = [...adicionales, a];
+    setAdicionales(lista);
+    void evaluarAhora(lista);
+  }
+
+  function quitarAdicional(i: number) {
+    const lista = adicionales.filter((_, j) => j !== i);
+    setAdicionales(lista);
+    void evaluarAhora(lista);
+  }
+
+  async function enviar() {
+    if (ocupado.current) return;
+    setAviso(null);
+    ocupado.current = true;
+    const f = fechasActuales();
+    esperar(
+      "Generando tu cuenta de cobro…",
+      "Estamos guardando tu planilla y armando la cuenta de cobro en Excel. Puede tardar hasta un minuto.",
+    );
+    try {
+      const r = await apiJson<RespEnviar>("/api/enviar", {
+        mes: mesKey,
+        fechaInicio: f.inicio,
+        fechaCorte: f.corte,
+        datos: datosDeInputs(inputs),
+        tempId,
+        adicionales: adicionalesPayload(),
+        diasManual: diasManualActual(),
+      });
+      setFinal(r);
+      mostrar("final");
+    } catch (e) {
+      if (!esSesionVencida(e)) {
+        mostrar("verificar");
+        avisar(mensajeDeError(e));
+      }
+    } finally {
+      ocupado.current = false;
+    }
+  }
+
+  // ---------------------------------------------------------------- paso 4
+  async function otroMes() {
+    setAviso(null);
+    setRefrescando(true);
+    try {
+      const r = await api<{ ok: true; contrato: Resumen }>("/api/sesion");
+      setTempId("");
+      setEvaluacion(null);
+      setSucio(false);
+      setEdicion(false);
+      setInputs(INPUTS_VACIOS);
+      setFinal(null);
+      setContrato(r.contrato);
+      empezarMes(r.contrato, r.contrato.mesDefault);
+      mostrar("datos");
+    } catch (e) {
+      errorEnBanner(e);
+    } finally {
+      setRefrescando(false);
+    }
+  }
+
+  // ---------------------------------------------------------------- pintar
+  return (
+    <main>
+      {aviso && (
+        <div className={"aviso " + aviso.tipo} role="alert">{aviso.msg}</div>
+      )}
+
+      {pantalla === "login" && <PasoLogin avisar={avisar} limpiarAviso={limpiarAviso} onEntrar={entrar} />}
+
+      {pantalla === "datos" && contrato && mes && (
+        <PasoDatos
+          contrato={contrato}
+          mes={mes}
+          periodo={periodo}
+          dias={dias}
+          onMes={cambiarMes}
+          onPeriodo={setPeriodo}
+          onDias={setDias}
+          onArchivo={alElegirArchivo}
+          onSalir={salir}
+        />
+      )}
+
+      {pantalla === "cargando" && <Cargando titulo={espera.titulo} texto={espera.texto} />}
+
+      {pantalla === "verificar" && (
+        <PasoVerificar
+          mesKey={mesKey}
+          inputs={inputs}
+          onInputs={alEditar}
+          edicion={edicion}
+          sucio={sucio}
+          evaluando={evaluando}
+          evaluacion={evaluacion}
+          leyo={leyo}
+          nota={nota}
+          adicionales={adicionales}
+          subirAdicional={(file) => subirPlanilla(file, true)}
+          onAgregarAdicional={agregarAdicional}
+          onQuitarAdicional={quitarAdicional}
+          onCorregir={corregir}
+          onRevisar={revisarDeNuevo}
+          onEnviar={enviar}
+          onOtra={() => { setAviso(null); mostrar("datos"); }}
+        />
+      )}
+
+      {pantalla === "final" && final && (
+        <PasoFinal resp={final} ocupado={refrescando} onOtroMes={otroMes} onSalir={salir} />
+      )}
+    </main>
+  );
+}

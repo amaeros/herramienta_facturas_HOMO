@@ -44,10 +44,33 @@ La contratista nueva se registra sola (`POST /api/registro`, ver `docs/ARQUITECT
 | `POST /api/admin/solicitudes/[id]/aprobar` | cuerpo opcional con campos corregidos (los del formulario de una trabajadora) | `contrato`. Valida como `PUT /api/admin/contratos/[id]` (lo que no viene se conserva; errores `{ok:false, error, campos}`), la deja `estado = 'activa'` y `activo = true`, y anota en la bitácora (`autor: 'admin'`) lo que corrigió y `aprobada` |
 | `POST /api/admin/solicitudes/[id]/rechazar` | — | — |
 
-- **Rechazar borra la fila** (su bitácora se borra en cascada). Solo actúa sobre solicitudes pendientes: sobre una cuenta ya activa da 404 y no borra nada. Aprobar una que ya no está pendiente también da 404 (`No encontramos esa solicitud...`).
+- **Rechazar borra la fila** (su bitácora y sus documentos se borran en cascada, y los PDF de Blob también). Solo actúa sobre solicitudes pendientes: sobre una cuenta ya activa da 404 y no borra nada. Aprobar una que ya no está pendiente también da 404 (`No encontramos esa solicitud...`).
 - Al aprobar se vuelven a revisar nombre y cédula únicos (contra todas las demás filas).
 - La bitácora de una solicitud no sale en "Cambios recientes" hasta que se aprueba; ahí aparecen `registro` ("Envió la solicitud de cuenta", autor la contratista) y `aprobada` ("Aprobó la solicitud de cuenta", autor el supervisor).
 - El importador de Excel no toca solicitudes pendientes: una fila con la cédula de una pendiente sale como error.
+
+## Verificar con documento
+
+El supervisor sube el **PDF del contrato, del acta de prórroga o adición, o de la póliza** de una trabajadora (o de una solicitud pendiente) y la app lo compara con los datos que tiene. Código: `src/server/documentos.ts` (la lectura es `src/lib/documentos.ts`, módulo puro). Tabla `documentos` y columna `contratos.verificada_en`: ver `docs/ARQUITECTURA.md`.
+
+| Ruta | Entrada | Salida |
+|---|---|---|
+| `POST /api/admin/documentos` | multipart: `contratoId`, `archivo` (PDF ≤ 4 MB, se revisan los primeros bytes), `texto` (lo que leyó **pdf.js en el navegador**, con el mismo cargador que usa la contratista) | `documento: {id, contratoId, tipo, nombreArchivo, campos, notas, subido}` (201) |
+| `GET /api/admin/documentos?contratoId=` | — | `documentos: [...]` del más nuevo al más viejo, **sin la ruta del archivo** |
+| `GET /api/admin/documentos/[id]/archivo` | — | el PDF desde Blob privado, `inline` |
+| `DELETE /api/admin/documentos/[id]` | — | borra la fila y el PDF |
+| `GET /api/admin/verificacion/[contratoId]` | — | `verificacion: {contratoId, verificadaEn, documentos, filas:[{campo, etiqueta, actual, documento, fuente:{documentoId, tipo, fecha}\|null, estado}]}` |
+| `POST /api/admin/verificacion/[contratoId]/usar` | `{campo}` | `contrato` (ya cambiado) |
+| `POST /api/admin/verificacion/[contratoId]/marcar` | — | `contrato` (con `verificadaEn`) |
+
+- **El servidor no confía en el navegador:** vuelve a leer `texto` con `leerDocumento` y guarda `tipo`, `campos` y `notas`. Si `texto` viene vacío (PDF escaneado) el documento queda `desconocido` con la nota «No se pudo leer el texto (¿PDF escaneado?). Compáralo a ojo.» y el PDF se guarda igual. Máximo 20 documentos por contrato. Funciona también con solicitudes pendientes (`estado = 'pendiente'`); sus PDF se borran si se rechaza.
+- **Los 11 datos que se comparan** (en este orden): n.º de contrato, nombre, cédula, objeto, honorario, valor total, inicio, fin, dirección, ciudad y teléfono. `estado`: `coincide`; `distinto` (el documento trae el dato y es otro, o la app lo tiene vacío); `sin_dato` (ningún documento lo trae).
+- **De qué documento sale cada dato** (dentro de cada tipo, el más reciente que lo traiga): **fin** y **valor total** del acta de prórroga o adición, si no, del contrato; **inicio** del acta, si no, de la póliza (vigencia desde; el contrato nunca trae el inicio); **honorario** del contrato, si no, del acta (lo deduce de la adición y los meses de prórroga); los demás, del documento más reciente que los traiga.
+- **Cómo se comparan:** nombre, dirección y ciudad sin tildes, mayúsculas ni espacios repetidos; **objeto** sin tildes ni mayúsculas y **sin espacios ni signos** (el PDF parte palabras: «DERE CHO», y trae comillas “ ”); cédula y teléfono solo con los dígitos; n.º de contrato sin espacios ni mayúsculas; dinero y fechas exactos.
+- **Usar el del documento** (`/usar`): el servidor vuelve a calcular el valor del documento (el cliente solo manda el nombre del campo) y lo guarda con la misma edición del panel (`actualizarContrato`: validaciones, bitácora con `autor: 'admin'` y recálculo de acumulados). Si el panel no lo deja (por ejemplo, un valor total menor que el honorario) responde `{ok:false, error, campos}` y no cambia nada. En la bitácora, nombre, cédula, dirección y teléfono se anotan como «(dato personal)» (cambiar la cédula cambia también el PIN).
+- **Marcar como verificada** (`/marcar`): guarda `verificada_en` y anota `verificada` en la bitácora. Hace falta al menos un documento subido. **Se borra sola** si la contratista cambia después un dato de su contrato (`PUT /api/mi-contrato`); lo que edita el supervisor (editar, «Usar el del documento», aprobar una solicitud) no la borra.
+- **Datos personales:** las respuestas de verificación llevan los valores completos (cédula, teléfono, dirección) porque solo las ve el supervisor; ni los valores ni el texto del PDF se escriben en logs ni en la bitácora.
+- Sin cookie de admin, todas dan 401.
 
 ## Cambio en lote
 
@@ -95,6 +118,7 @@ La contratista llena y corrige 11 datos de su contrato desde el celular (`PUT /a
 - `autor` = `'contratista'` o `'admin'`; `creado` = fecha ISO (UTC); `antes`/`despues` ya vienen legibles (fechas `DD/MM/AAAA`, dinero `$7.174.000`, vacío = `(vacío)`).
 - `alerta` (bool): `true` cuando la contratista guardó un **valor total distinto al que da su honorario por la vigencia**. En "Cambios recientes" y en el historial de cada trabajadora esa fila lleva la franja ámbar y el texto "Valor total distinto al esperado". El admin nunca genera alertas.
 - `etiqueta` = nombre para mostrar: `inicio` → "Fecha de inicio", `fin` → "Fecha de fin", `revisoNombre` → "Revisó (nombre)", `revisoCargo` → "Revisó (cargo)", `valorTotal` → "Valor total del contrato", `objeto` → "Objeto del contrato", `direccion` → "Dirección", `telefono` → "Teléfono", `correo` → "Correo", `ciudad` → "Ciudad", `cargo` → "Cargo". Los tres datos personales (dirección, teléfono, correo) **nunca guardan su valor**: `antes` y `despues` son `(dato personal)` y la pantalla dice "se actualizó". El admin además anota `numeroContrato`, `objeto`, `honorario`, `valorTotal`, `riesgo`, `riesgoNuevo`, `riesgoDesde` y `activo` (nunca datos personales, ciudad ni cargo).
+- «Usar el del documento» (ver "Verificar con documento") también anota nombre, cédula, dirección, teléfono y ciudad, pero los cuatro primeros siempre como `(dato personal)`. «Marcar como verificada» anota `verificada` («Marcó la cuenta como verificada con los documentos»).
 - Solo se anota lo que realmente cambió. Si se borra la trabajadora, su bitácora se borra con ella.
 - Sin cookie de admin → 401.
 
@@ -111,5 +135,11 @@ La contratista llena y corrige 11 datos de su contrato desde el celular (`PUT /a
 - `/admin/trabajadoras`: tabla (nombre, contrato, honorario, riesgo, fechas, activa, n.º cuentas) con buscador; botón **➕ Nueva trabajadora**; por fila **✏️ Editar**, **⏸️ Desactivar/Activar**, **🗑️ Borrar**. Formulario agrupado: *Datos personales* (nombre, cédula, dirección, teléfono, ciudad, correo) · *Contrato* (n.º, objeto, cargo, línea, inicio, fin, honorario, valor total) · *ARL* (riesgo, riesgo nuevo, desde) · *Revisó* (nombre, cargo) · *Activa*. Errores junto al campo. Borrar con diálogo de confirmación (pide escribir el nombre si tiene cuentas).
   En el panel de edición de una trabajadora hay dos acciones guiadas, **Registrar otrosí** (nueva fecha de fin y nuevo valor total) y **Registrar contrato nuevo** (n.º, fechas, honorario, valor total, objeto); ver "Otrosí y contrato nuevo". En la tabla hay casillas para escoger varias y el botón **Cambiar a varias** (fecha de fin y/o de inicio; ver "Cambio en lote"), que al terminar muestra cuántas se cambiaron y por qué no se cambió alguna.
   Botón **📥 Importar desde Excel**: subir → mostrar la vista previa (crear / actualizar con antes→después / errores) → botón **Aplicar cambios**.
+- **Verificar con documento** (`VerificarDocumento.tsx`): sección del panel lateral de una trabajadora y también del detalle de una solicitud (antes de «Historial de cambios»).
+  - Botón **Subir contrato, acta o póliza (PDF)**: el navegador lee el texto del PDF (pdf.js) y lo manda con el archivo.
+  - Lista de lo subido: tipo en palabras (Contrato, Acta de prórroga o adición, Póliza, Documento sin reconocer), fecha, **Ver PDF** y **Quitar** (pide confirmar). Las notas del lector salen debajo, como ayuda discreta.
+  - Tabla **Dato, Lo que tiene la app, Lo que dice el documento, Estado**: el estado es la franja de color más la palabra (Coincide, Distinto, Sin dato). Debajo del valor del documento se dice de cuál salió. En cada fila **Distinto** hay un botón **Usar el del documento**; el campo del formulario toma el valor nuevo sin tocar lo demás que se esté escribiendo.
+  - Botón principal **Marcar como verificada**; después dice «Verificada el DD/MM/AAAA».
+  - La tabla de Trabajadoras tiene una columna **Verificada** (Sí con la fecha, o No). La cédula y el teléfono completos solo se ven dentro de este panel.
 - `/admin/parametros`: formulario con los valores en porcentaje legible (12,5 %) y SMMLV con puntos.
 - La cédula se muestra completa solo dentro del formulario de edición; en tablas, enmascarada (`…1234`).

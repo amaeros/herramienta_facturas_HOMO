@@ -8,7 +8,7 @@ import Dialogo from "./Dialogo";
 import FormularioTrabajadora from "./FormularioTrabajadora";
 import ImportarExcel from "./ImportarExcel";
 import PanelLateral from "./PanelLateral";
-import { enmascararCedula, filtrarContratos, nombreCoincide, payloadDeContrato, pesos } from "./helpers";
+import { enmascararCedula, filtrarContratos, fmtFechaSolicitud, nombreCoincide, payloadDeContrato, pesos } from "./helpers";
 import { useDatos } from "./useDatos";
 import { fmtFecha } from "../formato";
 import css from "./admin.module.css";
@@ -318,6 +318,7 @@ export default function Trabajadoras() {
                     <th scope="col">Riesgo</th>
                     <th scope="col">Fechas</th>
                     <th scope="col">Activa</th>
+                    <th scope="col">Verificada</th>
                     <th scope="col" className={css.num}>Cuentas</th>
                     <th scope="col">Acciones</th>
                   </tr>
@@ -348,6 +349,16 @@ export default function Trabajadoras() {
                       <td data-label="Fechas" className={css.num}>{c.inicio ? fmtFecha(c.inicio) : "—"} a {c.fin ? fmtFecha(c.fin) : "—"}</td>
                       <td data-label="Activa">
                         <span className={css.estadoTxt}>{c.activo ? "Sí" : "No"}</span>
+                      </td>
+                      <td data-label="Verificada">
+                        {c.verificadaEn ? (
+                          <div className={css.celdaDer}>
+                            <span className={css.verificadaSi}>Sí</span>
+                            <span className={css.sub}>{fmtFechaSolicitud(c.verificadaEn)}</span>
+                          </div>
+                        ) : (
+                          <span className={css.sub}>No</span>
+                        )}
                       </td>
                       <td data-label="Cuentas" className={css.num}>{c.cargas}</td>
                       <td data-label="">
@@ -411,6 +422,7 @@ export default function Trabajadoras() {
           <FormularioTrabajadora
             inicial={vista.contrato}
             onCancelar={() => volverALista(null)}
+            onActualizada={(c) => modificar((lista) => lista.map((x) => (x.id === c.id ? { ...c, cargas: x.cargas } : x)))}
             onGuardado={(c, mensaje) => {
               modificar((lista) => {
                 const existe = lista.some((x) => x.id === c.id);

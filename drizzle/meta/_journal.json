@@ -43,6 +43,13 @@
       "when": 1791352887943,
       "tag": "0005_registro_estado",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791354566164,
+      "tag": "0006_documentos_verificacion",
+      "breakpoints": true
     }
   ]
 }

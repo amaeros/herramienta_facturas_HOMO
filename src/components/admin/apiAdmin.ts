@@ -85,12 +85,49 @@ export interface Contrato {
   revisoNombre: string;
   revisoCargo: string;
   activo: boolean;
+  /** Cuándo se marcó como verificada con los documentos (fecha y hora ISO), o null si no (o si la contratista cambió algo después). */
+  verificadaEn: string | null;
   /** Cuántas cuentas (cargas) tiene enviadas. */
   cargas: number;
 }
 
-/** Lo que se envía al crear o editar (sin id ni n.º de cuentas). */
-export type ContratoPayload = Omit<Contrato, "id" | "cargas">;
+/** Lo que se envía al crear o editar (sin id, sin n.º de cuentas y sin la marca de verificada, que no se edita aquí). */
+export type ContratoPayload = Omit<Contrato, "id" | "cargas" | "verificadaEn">;
+
+export type TipoDocumento = "contrato" | "acta_prorroga" | "poliza" | "desconocido";
+
+/** Un PDF subido para verificar (la ruta del archivo nunca llega al navegador). */
+export interface DocumentoSubido {
+  id: number;
+  contratoId: number;
+  tipo: TipoDocumento;
+  nombreArchivo: string;
+  /** Avisos del lector ("no trae la fecha exacta de inicio"...). */
+  notas: string[];
+  /** Fecha y hora ISO. */
+  subido: string;
+}
+
+export type EstadoVerificacion = "coincide" | "distinto" | "sin_dato";
+
+export interface FilaVerificacion {
+  campo: string;
+  etiqueta: string;
+  /** Lo que tiene la app (null si está vacío). */
+  actual: string | number | null;
+  /** Lo que dice el documento (null si ningún documento trae el dato). */
+  documento: string | number | null;
+  /** Qué documento se usó. */
+  fuente: { documentoId: number; tipo: TipoDocumento; fecha: string } | null;
+  estado: EstadoVerificacion;
+}
+
+export interface Verificacion {
+  verificadaEn: string | null;
+  /** Cuántos documentos hay subidos. */
+  documentos: number;
+  filas: FilaVerificacion[];
+}
 
 export interface AdicionalAdmin {
   numero: string;
@@ -209,9 +246,14 @@ export interface ResumenImportacion {
 
 const TIMEOUT_MS = 60_000;
 
+const MSG_EXCEL_GRANDE = "El archivo pesa demasiado (máximo 1 MB).";
+const MSG_PDF_GRANDE = "El PDF pesa más de 4 MB. Sube uno más liviano.";
+
 interface Opciones {
   /** En el login un 401 significa "contraseña incorrecta", no "sesión vencida". */
   sinAvisoDeVencida?: boolean;
+  /** Mensaje cuando la plataforma rechaza el cuerpo por grande (413) sin explicar nada. */
+  mensaje413?: string;
 }
 
 async function llamarAdmin<T>(url: string, init: RequestInit = {}, op: Opciones = {}): Promise<T> {
@@ -238,7 +280,7 @@ async function llamarAdmin<T>(url: string, init: RequestInit = {}, op: Opciones 
     oyentes.forEach((fn) => fn());
     throw new AdminError(MSG_SESION_ADMIN_VENCIDA, 401);
   }
-  if (res.status === 413) throw new AdminError("El archivo pesa demasiado (máximo 1 MB).", 413);
+  if (res.status === 413 && !(obj && typeof obj.error === "string" && obj.error)) throw new AdminError(op.mensaje413 ?? MSG_EXCEL_GRANDE, 413);
   if (!obj) throw new AdminError(MSG_GENERICO, res.status);
   if (obj.ok === false || !res.ok) {
     throw new AdminError(
@@ -298,7 +340,45 @@ export function normalizarContrato(raw: Crudo): Contrato {
     revisoNombre: txt(g("revisoNombre")),
     revisoCargo: txt(g("revisoCargo")),
     activo: g("activo") !== false,
+    verificadaEn: txt(g("verificadaEn")) || null,
     cargas: Number(g("cargas")) || 0,
+  };
+}
+
+const TIPOS_DOCUMENTO: readonly string[] = ["contrato", "acta_prorroga", "poliza"];
+const tipoDocumento = (v: unknown): TipoDocumento => (TIPOS_DOCUMENTO.includes(txt(v)) ? (txt(v) as TipoDocumento) : "desconocido");
+
+export function normalizarDocumento(raw: Crudo): DocumentoSubido {
+  const g = (k: string) => tomar(raw, k);
+  return {
+    id: Number(g("id")),
+    contratoId: Number(g("contratoId")),
+    tipo: tipoDocumento(g("tipo")),
+    nombreArchivo: txt(g("nombreArchivo")),
+    notas: Array.isArray(g("notas")) ? (g("notas") as unknown[]).filter((n): n is string => typeof n === "string") : [],
+    subido: txt(g("subido")),
+  };
+}
+
+const valorFila = (v: unknown): string | number | null => (typeof v === "number" ? v : typeof v === "string" && v ? v : null);
+
+export function normalizarVerificacion(raw: Crudo): Verificacion {
+  const filas = Array.isArray(raw.filas) ? (raw.filas as Crudo[]) : [];
+  return {
+    verificadaEn: txt(raw.verificadaEn) || null,
+    documentos: Number(raw.documentos) || 0,
+    filas: filas.map((f) => {
+      const fu = f.fuente && typeof f.fuente === "object" ? (f.fuente as Crudo) : null;
+      const estado = txt(f.estado);
+      return {
+        campo: txt(f.campo),
+        etiqueta: txt(f.etiqueta) || txt(f.campo),
+        actual: valorFila(f.actual),
+        documento: valorFila(f.documento),
+        fuente: fu ? { documentoId: Number(fu.documentoId), tipo: tipoDocumento(fu.tipo), fecha: txt(fu.fecha) } : null,
+        estado: estado === "coincide" || estado === "distinto" ? estado : "sin_dato",
+      };
+    }),
   };
 }
 
@@ -504,6 +584,44 @@ export const apiAdmin = {
     return (r.cambios || []).map(normalizarCambio);
   },
 
+  /** PDF subidos para verificar este contrato (de una trabajadora o de una solicitud), del más nuevo al más viejo. */
+  async documentos(contratoId: number): Promise<DocumentoSubido[]> {
+    const r = await llamarAdmin<{ ok: true; documentos: Crudo[] }>(`/api/admin/documentos?contratoId=${encodeURIComponent(String(contratoId))}`);
+    return (r.documentos || []).map(normalizarDocumento);
+  },
+
+  /** Sube el PDF con el texto que leyó pdf.js en el navegador; el servidor lo vuelve a leer. */
+  async subirDocumento(contratoId: number, archivo: File, texto: string): Promise<DocumentoSubido> {
+    const fd = new FormData();
+    fd.append("contratoId", String(contratoId));
+    fd.append("archivo", archivo);
+    fd.append("texto", texto);
+    const r = await llamarAdmin<{ ok: true; documento: Crudo }>("/api/admin/documentos", { method: "POST", body: fd }, { mensaje413: MSG_PDF_GRANDE });
+    return normalizarDocumento(r.documento);
+  },
+
+  async quitarDocumento(id: number): Promise<void> {
+    await llamarAdmin(`/api/admin/documentos/${id}`, { method: "DELETE" });
+  },
+
+  /** Compara los datos de la app con lo que dicen los documentos subidos. */
+  async verificacion(contratoId: number): Promise<Verificacion> {
+    const r = await llamarAdmin<{ ok: true; verificacion: Crudo }>(`/api/admin/verificacion/${contratoId}`);
+    return normalizarVerificacion(r.verificacion);
+  },
+
+  /** Copia al contrato lo que dice el documento. Devuelve el contrato ya cambiado. */
+  async usarDelDocumento(contratoId: number, campo: string): Promise<Contrato> {
+    const r = await llamarAdmin<{ ok: true; contrato: Crudo }>(`/api/admin/verificacion/${contratoId}/usar`, enJson("POST", { campo }));
+    return normalizarContrato(r.contrato);
+  },
+
+  /** "Marcar como verificada". Devuelve el contrato con la fecha. */
+  async marcarVerificada(contratoId: number): Promise<Contrato> {
+    const r = await llamarAdmin<{ ok: true; contrato: Crudo }>(`/api/admin/verificacion/${contratoId}/marcar`, { method: "POST" });
+    return normalizarContrato(r.contrato);
+  },
+
   async parametros(): Promise<Parametros> {
     return extraerParametros(await llamarAdmin("/api/admin/parametros"));
   },
@@ -516,3 +634,4 @@ export const apiAdmin = {
 /** Enlaces (descarga/ver archivo): los abre el navegador con la cookie de admin. */
 export const urlFactura = (cargaId: number) => `/api/factura/${cargaId}`;
 export const urlPlanilla = (cargaId: number, n: number) => `/api/admin/planilla/${cargaId}?n=${n}`;
+export const urlDocumento = (documentoId: number) => `/api/admin/documentos/${documentoId}/archivo`;

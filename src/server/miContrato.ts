@@ -157,8 +157,10 @@ export async function guardarMiContrato(
   const cambios = diferencias(actual, nuevos as Partial<ContratoFila>, Object.keys(nuevos));
   let c = actual;
   if (cambios.length) {
-    const aGuardar: Record<string, string | number> = {};
+    const aGuardar: Record<string, string | number | null> = {};
     for (const d of cambios) aGuardar[d.campo] = nuevos[d.campo as CampoContratista]!;
+    // un cambio de la contratista deja sin efecto la verificación con documentos del supervisor: hay que revisarla de nuevo
+    aGuardar.verificadaEn = null;
     [c] = await deps.db.update(contratos).set(aGuardar).where(eq(contratos.id, contratoId)).returning();
   }
 

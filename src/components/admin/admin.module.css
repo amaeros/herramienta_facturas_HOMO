@@ -256,3 +256,32 @@
 
 .volver { flex: none; white-space: nowrap; background: none; border: 0; padding: 8px 0; min-height: var(--tactil); color: var(--verde-homo); font-weight: 600; font-size: var(--t-texto); cursor: pointer; font-family: inherit; text-decoration: underline; margin-bottom: 4px; }
 .encabezadoPagina { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; align-items: flex-end; margin-bottom: 14px; }
+
+/* ---------- verificar con documento ---------- */
+.verif { border-top: 1px solid var(--linea); margin-top: 28px; padding-top: 16px; min-width: 0; }
+.verifDoc { display: block; }
+.verifDocCabecera { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 8px 16px; }
+.verifResumen { margin: 20px 0 10px; font-weight: 600; }
+.valorCaja { min-width: 0; }
+.valorTexto { display: block; overflow-wrap: anywhere; }
+.valorCorto { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; }
+.btnLinkChico { min-height: 32px; display: inline-block; font-size: var(--t-ayuda); text-align: inherit; }
+.tablaVerif td, .tablaVerif th { vertical-align: top; }
+.verifCierre { margin-top: 20px; }
+.verifCierre .pista { margin-top: 8px; }
+.verificada { margin: 0; font-size: var(--t-sub); font-weight: 700; color: var(--verde-homo); }
+.verificadaSi { font-weight: 700; color: var(--verde-homo); }
+@media (max-width: 1019px) {
+  .tabla td > .valorCaja { text-align: right; }
+  .tablaVerif td:first-child { justify-content: flex-start; text-align: left; font-size: var(--t-sub); line-height: 1.2; }
+}/* en pantalla ancha el panel mide 600 px: cuatro columnas con anchos fijos para poder comparar de lado a lado */
+@media (min-width: 1020px) {
+  .tablaVerif { table-layout: fixed; }
+  .tablaVerif th { white-space: normal; }
+  .tablaVerif th, .tablaVerif td { padding: 10px; }
+  .tablaVerif th:nth-child(1), .tablaVerif td:nth-child(1) { width: 19%; padding-left: 16px; }
+  .tablaVerif th:nth-child(2), .tablaVerif td:nth-child(2) { width: 27%; }
+  .tablaVerif th:nth-child(3), .tablaVerif td:nth-child(3) { width: 29%; }
+  .tablaVerif th:nth-child(4), .tablaVerif td:nth-child(4) { width: 25%; }
+  .tablaVerif td:first-child { overflow-wrap: anywhere; }
+}

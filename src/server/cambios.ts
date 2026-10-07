@@ -15,7 +15,7 @@ export type AutorCambio = 'contratista' | 'admin';
 export const DATO_PERSONAL = '(dato personal)';
 
 /** Campos cuyo valor NUNCA se guarda en la bitácora. */
-export const CAMPOS_PERSONALES: ReadonlySet<string> = new Set(['direccion', 'telefono', 'correo']);
+export const CAMPOS_PERSONALES: ReadonlySet<string> = new Set(['direccion', 'telefono', 'correo', 'nombre', 'cedula']);
 
 /** Etiqueta legible de cada campo auditado (lo que ve el supervisor). */
 export const ETIQUETAS_CAMPO: Record<string, string> = {
@@ -34,6 +34,10 @@ export const ETIQUETAS_CAMPO: Record<string, string> = {
   // solicitud de cuenta nueva (registro propio de la contratista, aprobado por el supervisor)
   registro: 'Solicitud de cuenta',
   aprobada: 'Solicitud aprobada',
+  // verificación contra los PDF del contrato (docs/ADMIN.md)
+  verificada: 'Verificación con documento',
+  nombre: 'Nombre',
+  cedula: 'Cédula',
   // los que solo cambia la contratista (los admin no se anotan: ver CAMPOS_AUDITADOS_ADMIN)
   direccion: 'Dirección',
   telefono: 'Teléfono',

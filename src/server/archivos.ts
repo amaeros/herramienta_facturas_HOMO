@@ -36,6 +36,11 @@ export function nombreLimpio(nombre: string): string {
   return s || 'planilla';
 }
 
+/** documentos/<contratoId>/<uuid>-<nombre limpio>.pdf (contrato, acta o póliza que sube el supervisor) */
+export function rutaDocumento(contratoId: number, nombre: string): string {
+  return `documentos/${contratoId}/${randomUUID()}-${nombreLimpio(nombre).replace(/^planilla$/, 'documento')}.pdf`;
+}
+
 /** planillas/<contratoId>/<AAAA-MM>/<uuid>-<nombre limpio>.<ext> */
 export function rutaPlanilla(contratoId: number, mes: string, nombre: string, ext: string): string {
   return `planillas/${contratoId}/${mes}/${randomUUID()}-${nombreLimpio(nombre)}.${ext}`;

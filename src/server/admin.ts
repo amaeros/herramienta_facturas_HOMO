@@ -7,7 +7,7 @@ import { addMonths, ESTADO_EMOJI, ESTADO_TEXTO, monthsBetween, parseYMD, type Es
 import { nombreLimpio } from './archivos';
 import type { BlobStore } from './blob';
 import type { Db } from './db';
-import { cargas, contratos, lecturas, parametros, type AdicionalGuardada, type ContratoFila, type Parametros } from './db/schema';
+import { cargas, contratos, documentos, lecturas, parametros, type AdicionalGuardada, type ContratoFila, type Parametros } from './db/schema';
 import { CAMPOS_AUDITADOS_ADMIN, diferencias, registrarCambios } from './cambios';
 import {
   CORREO_RE,
@@ -228,16 +228,24 @@ export function validarContrato(
 }
 
 // =================================================================== trabajadoras (CRUD)
-async function contarCargas(db: Db, id: number): Promise<number> {
+export async function contarCargas(db: Db, id: number): Promise<number> {
   const [r] = await db.select({ n: count() }).from(cargas).where(eq(cargas.contratoId, id));
   return Number(r?.n ?? 0);
 }
 
-/** Una trabajadora de verdad. Las solicitudes pendientes se manejan solo desde "Solicitudes" (aprobar o rechazar). */
-async function contratoPorId(db: Db, id: number): Promise<ContratoFila> {
+/**
+ * Una trabajadora de verdad. Las solicitudes pendientes se manejan solo desde "Solicitudes" (aprobar o rechazar),
+ * salvo que `incluirPendientes` (la verificación con documentos también trabaja sobre las solicitudes).
+ */
+async function contratoPorId(db: Db, id: number, incluirPendientes = false): Promise<ContratoFila> {
   const [c] = await db.select().from(contratos).where(eq(contratos.id, id)).limit(1);
-  if (!c || c.estado === 'pendiente') throw new ErrorAmable(MSG_NO_TRABAJADORA, 404);
+  if (!c || (c.estado === 'pendiente' && !incluirPendientes)) throw new ErrorAmable(MSG_NO_TRABAJADORA, 404);
   return c;
+}
+
+/** Un contrato por id, sea trabajadora o solicitud pendiente (404 si no existe). */
+export async function contratoCualquiera(db: Db, id: number): Promise<ContratoFila> {
+  return contratoPorId(db, id, true);
 }
 
 export async function listarContratos(deps: Deps): Promise<ContratoAdmin[]> {
@@ -254,13 +262,26 @@ export async function crearContrato(deps: Deps, entrada: Record<string, unknown>
   return { ...c, cargas: 0 };
 }
 
-export async function actualizarContrato(deps: Deps, id: number, entrada: Record<string, unknown>): Promise<ContratoAdmin> {
-  const actual = await contratoPorId(deps.db, id);
+export type OpcionesActualizar = {
+  /** También edita una solicitud pendiente (la verificación con documentos la usa). */
+  incluirPendientes?: boolean;
+  /** Campos extra que se anotan en la bitácora además de CAMPOS_AUDITADOS_ADMIN (los personales salen como "(dato personal)"). */
+  auditar?: readonly string[];
+};
+
+export async function actualizarContrato(
+  deps: Deps,
+  id: number,
+  entrada: Record<string, unknown>,
+  opciones: OpcionesActualizar = {},
+): Promise<ContratoAdmin> {
+  const actual = await contratoPorId(deps.db, id, opciones.incluirPendientes === true);
   const otros = (await deps.db.select().from(contratos)).filter((c) => c.id !== id);
   const v = validarContrato(entrada, actual, otros);
+  // `verificadaEn` no está en `v`: lo que edita el supervisor NO borra la verificación (solo lo que cambia la contratista)
   const [c] = await deps.db.update(contratos).set(v).where(eq(contratos.id, id)).returning();
   // bitácora: solo los campos que de verdad cambiaron
-  await registrarCambios(deps, id, 'admin', diferencias(actual, c, CAMPOS_AUDITADOS_ADMIN));
+  await registrarCambios(deps, id, 'admin', diferencias(actual, c, [...CAMPOS_AUDITADOS_ADMIN, ...(opciones.auditar ?? [])]));
   // el valor total / fechas pueden haber cambiado: acumulado y % se recalculan (el valor de cada mes NO se re-evalúa)
   await recalcularAcumulados(deps.db, c);
   return { ...c, cargas: await contarCargas(deps.db, id) };
@@ -282,7 +303,9 @@ export async function borrarContrato(deps: Deps, id: number, confirmar?: unknown
     );
   }
   const pendientes = await db.select({ archivo: lecturas.archivo }).from(lecturas).where(eq(lecturas.contratoId, id));
+  const pdfs = await db.select({ archivo: documentos.archivo }).from(documentos).where(eq(documentos.contratoId, id));
   const archivos = new Set<string>();
+  for (const d of pdfs) if (d.archivo) archivos.add(d.archivo);
   for (const f of filas) {
     if (f.archivoPlanilla) archivos.add(f.archivoPlanilla);
     for (const a of f.adicionales ?? []) if (a.archivo) archivos.add(a.archivo);

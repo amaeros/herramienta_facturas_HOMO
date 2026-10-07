@@ -9,7 +9,7 @@ const contrato: Contrato = {
   id: 7, nombre: "Ana Prueba Ejemplo", cedula: "1000000123", direccion: "Calle 1", telefono: "3000000000", ciudad: "Medellín",
   correo: "ana@ejemplo.com", numeroContrato: "2026CPSP000", objeto: "Apoyar el observatorio.", cargo: "Profesional", linea: "Línea X",
   inicio: "2026-01-01", fin: "2026-09-30", honorario: 4009000, valorTotal: 36081000, riesgo: "III", riesgoNuevo: "", riesgoDesde: null,
-  revisoNombre: "Supervisor", revisoCargo: "Apoyo", activo: true, cargas: 3,
+  revisoNombre: "Supervisor", revisoCargo: "Apoyo", activo: true, verificadaEn: null, cargas: 3,
 };
 
 describe("otrosí", () => {

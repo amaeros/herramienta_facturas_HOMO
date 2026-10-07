@@ -5,10 +5,11 @@ import { AdminError, apiAdmin, textoError, type Contrato } from "./apiAdmin";
 import CambioGuiado, { type TipoCambioGuiado } from "./CambioGuiado";
 import CampoAdmin, { type CampoAdminProps } from "./CampoAdmin";
 import {
-  campoDeMensaje, erroresDeCampos, formDeContrato, formVacio, NIVELES_RIESGO, parseEntero, payloadDeForm, puntos, validarForm,
+  campoDeMensaje, CAMPOS_TEXTO, erroresDeCampos, formDeContrato, formVacio, NIVELES_RIESGO, parseEntero, payloadDeForm, puntos, validarForm,
   type CampoForm, type ErroresForm, type FormContrato,
 } from "./helpers";
 import { HistorialCambios } from "./Cambios";
+import VerificarDocumento from "./VerificarDocumento";
 import css from "./admin.module.css";
 
 interface Props {
@@ -22,16 +23,34 @@ interface Props {
   /** `mensaje` = lo que se le dice al supervisor al volver a la lista (si no, el de siempre). */
   onGuardado: (c: Contrato, mensaje?: string) => void;
   onCancelar: () => void;
+  /**
+   * "Verificar con documento" cambió el contrato sin cerrar el panel (copió un dato del documento o la marcó verificada):
+   * la lista de atrás se pone al día con este contrato.
+   */
+  onActualizada?: (c: Contrato) => void;
 }
 
 /** Formulario para crear o editar una trabajadora, o revisar una solicitud, agrupado como en docs/ADMIN.md. */
-export default function FormularioTrabajadora({ inicial, solicitud, onGuardado, onCancelar }: Props) {
+export default function FormularioTrabajadora({ inicial, solicitud, onGuardado, onCancelar, onActualizada }: Props) {
   const idTitulo = useId();
   const [f, setF] = useState<FormContrato>(() => (inicial ? formDeContrato(inicial) : formVacio()));
   const [errores, setErrores] = useState<ErroresForm>({});
   const [errorGeneral, setErrorGeneral] = useState("");
   const [ocupado, setOcupado] = useState(false);
   const [guiado, setGuiado] = useState<TipoCambioGuiado | null>(null);
+  // el contrato como está ahora (cambia si se copia un dato de un documento): lo usan "otrosí" y "contrato nuevo"
+  const [vigente, setVigente] = useState<Contrato | null>(inicial);
+
+  /** Se copió un dato del documento (o se marcó verificada): el campo del formulario toma el valor nuevo; lo demás que se esté escribiendo no se toca. */
+  function alCambiarContrato(c: Contrato, campo?: string) {
+    setVigente(c);
+    if (campo && (CAMPOS_TEXTO as readonly string[]).includes(campo)) {
+      const k = campo as CampoForm;
+      setF((prev) => ({ ...prev, [k]: formDeContrato(c)[k] }));
+      setErrores((prev) => ({ ...prev, [k]: undefined }));
+    }
+    onActualizada?.(c);
+  }
 
   function poner<K extends keyof FormContrato>(k: K, v: FormContrato[K]) {
     setF((prev) => ({ ...prev, [k]: v }));
@@ -101,7 +120,7 @@ export default function FormularioTrabajadora({ inicial, solicitud, onGuardado, 
     return (
       <CambioGuiado
         tipo={guiado}
-        contrato={inicial}
+        contrato={vigente ?? inicial}
         onGuardado={onGuardado}
         onVolver={() => setGuiado(null)}
       />
@@ -226,6 +245,8 @@ export default function FormularioTrabajadora({ inicial, solicitud, onGuardado, 
             </label>
           </fieldset>
         )}
+
+        {inicial && <VerificarDocumento contratoId={inicial.id} onContrato={alCambiarContrato} />}
 
         {inicial && !solicitud && <HistorialCambios contratoId={inicial.id} />}
 

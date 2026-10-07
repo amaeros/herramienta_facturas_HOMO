@@ -5,7 +5,7 @@ import { and, asc, eq, inArray } from 'drizzle-orm';
 import { validarContrato, type ContratoAdmin } from './admin';
 import { CAMPOS_AUDITADOS_ADMIN, diferencias, registrarCambios } from './cambios';
 import type { Db } from './db';
-import { cambiosContrato, contratos, type ContratoFila } from './db/schema';
+import { cambiosContrato, contratos, documentos, type ContratoFila } from './db/schema';
 import { ErrorAmable } from './errores';
 import type { Deps } from './servicios';
 
@@ -68,8 +68,21 @@ export async function aprobarSolicitud(deps: Deps, id: number, entrada: Record<s
   return { ...c, cargas: 0 };
 }
 
-/** Rechaza la solicitud: se borra la fila (su bitácora se borra en cascada). Nunca borra una cuenta ya aprobada. */
+/**
+ * Rechaza la solicitud: se borra la fila (su bitácora y sus documentos se borran en cascada). Nunca borra una cuenta ya
+ * aprobada. Los PDF de los documentos que subió el supervisor se borran de Blob primero: si Blob falla, no se pierde nada.
+ */
 export async function rechazarSolicitud(deps: Deps, id: number): Promise<void> {
+  await solicitudPorId(deps.db, id); // 404 si ya no es una solicitud pendiente: así nunca se tocan archivos de una cuenta aprobada
+  const pdfs = await deps.db.select({ archivo: documentos.archivo }).from(documentos).where(eq(documentos.contratoId, id));
+  const archivos = pdfs.map((d) => d.archivo).filter(Boolean);
+  if (archivos.length) {
+    try {
+      await deps.blob.del(archivos);
+    } catch {
+      throw new ErrorAmable('No pudimos borrar los PDF de la solicitud. No se rechazó; inténtalo de nuevo en un momento.', 502);
+    }
+  }
   const borradas = await deps.db
     .delete(contratos)
     .where(and(eq(contratos.id, id), eq(contratos.estado, 'pendiente')))

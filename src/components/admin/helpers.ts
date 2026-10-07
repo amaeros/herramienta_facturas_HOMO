@@ -1,7 +1,9 @@
 /** Utilidades puras del panel del supervisor (formato, lectura de números, formularios). Sin React. */
 
 import { dinero, fmtFecha, labelMes, pad2 } from "../formato";
-import type { CambioContrato, Contrato, ContratoPayload, Parametros } from "./apiAdmin";
+import type {
+  CambioContrato, Contrato, ContratoPayload, EstadoVerificacion, FilaVerificacion, Parametros, Solicitud, TipoDocumento,
+} from "./apiAdmin";
 
 // --- texto ----------------------------------------------------------------------------------
 
@@ -144,6 +146,7 @@ export function lineaCambio(c: Pick<CambioContrato, "etiqueta" | "antes" | "desp
   // la solicitud de cuenta nueva no es un cambio de valor: se cuenta como evento
   if (c.campo === "registro") return "Envió la solicitud de cuenta";
   if (c.campo === "aprobada") return "Aprobó la solicitud de cuenta";
+  if (c.campo === "verificada") return "Marcó la cuenta como verificada con los documentos";
   if (c.antes === DATO_PERSONAL || c.despues === DATO_PERSONAL) return `${c.etiqueta}: se actualizó (el dato no se guarda aquí)`;
   const antesVacio = !c.antes || c.antes === SIN_VALOR;
   const despuesVacio = !c.despues || c.despues === SIN_VALOR;
@@ -275,6 +278,7 @@ export function payloadDeContrato(c: Contrato, cambios: Partial<ContratoPayload>
   const resto: Partial<Contrato> = { ...c };
   delete resto.id;
   delete resto.cargas;
+  delete resto.verificadaEn;
   return { ...(resto as ContratoPayload), ...cambios };
 }
 
@@ -329,6 +333,71 @@ export function fmtFechaSolicitud(iso: string | null | undefined): string {
 /** "1 solicitud pendiente", "3 solicitudes pendientes" (para el lector de pantalla y el encabezado). */
 export function textoPendientes(n: number): string {
   return n === 1 ? "1 solicitud pendiente" : `${n} solicitudes pendientes`;
+}
+
+/** La fila de la lista de solicitudes al día con el contrato que acaba de cambiar (por ejemplo, tras copiar un dato del documento). */
+export function solicitudActualizada(s: Solicitud, c: Contrato): Solicitud {
+  return {
+    ...s,
+    nombre: c.nombre,
+    cedulaFinal4: ultimos4(c.cedula),
+    linea: c.linea,
+    numeroContrato: c.numeroContrato,
+    cargo: c.cargo,
+    inicio: c.inicio,
+    fin: c.fin,
+    honorario: c.honorario,
+    riesgo: c.riesgo,
+  };
+}
+
+// --- verificar con documento ----------------------------------------------------------------
+
+/** El tipo de documento en palabras sencillas. */
+export function textoTipoDocumento(t: TipoDocumento): string {
+  if (t === "contrato") return "Contrato";
+  if (t === "acta_prorroga") return "Acta de prórroga o adición";
+  if (t === "poliza") return "Póliza";
+  return "Documento sin reconocer";
+}
+
+export function textoEstadoVerificacion(e: EstadoVerificacion): string {
+  return e === "coincide" ? "Coincide" : e === "distinto" ? "Distinto" : "Sin dato";
+}
+
+/** Un valor de la comparación listo para mostrar: dinero con puntos, fechas DD/MM/AAAA, '—' si no hay. */
+export function textoValorVerificacion(campo: string, v: string | number | null | undefined): string {
+  if (v === null || v === undefined || v === "") return "—";
+  if (campo === "honorario" || campo === "valorTotal") return typeof v === "number" ? pesos(v) : pesos(Number(v));
+  if (campo === "inicio" || campo === "fin") return fmtFecha(String(v));
+  return String(v);
+}
+
+/** "Contrato, subido el 07/10/2026": de qué documento sale lo que dice el documento. Vacío si ninguno trae el dato. */
+export function textoFuenteVerificacion(f: FilaVerificacion["fuente"]): string {
+  return f ? `${textoTipoDocumento(f.tipo)}, subido el ${fmtFechaSolicitud(f.fecha)}` : "";
+}
+
+/** "Verificada el 07/10/2026". */
+export function textoVerificada(iso: string | null | undefined): string {
+  return `Verificada el ${fmtFechaSolicitud(iso)}`;
+}
+
+/** Cuántos datos salieron distintos (para el resumen sobre la tabla). */
+export function contarDistintos(filas: Pick<FilaVerificacion, "estado">[]): number {
+  return filas.filter((f) => f.estado === "distinto").length;
+}
+
+/** "Hay 2 datos distintos", "Todo lo que traen los documentos coincide". */
+export function resumenVerificacion(filas: Pick<FilaVerificacion, "estado">[]): string {
+  const n = contarDistintos(filas);
+  if (n === 0) return filas.some((f) => f.estado === "coincide") ? "Todo lo que traen los documentos coincide con la app." : "Los documentos no traen datos para comparar.";
+  return n === 1 ? "Hay 1 dato distinto." : `Hay ${n} datos distintos.`;
+}
+
+/** Ayuda extra al copiar el dato del documento (la cédula es el PIN). */
+export function ayudaUsarDato(campo: string): string {
+  return campo === "cedula" ? "Cambia también el PIN con el que entra al celular." : "";
 }
 
 // --- cambios guiados del contrato (otrosí y contrato nuevo) --------------------------------------

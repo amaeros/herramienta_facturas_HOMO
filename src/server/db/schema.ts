@@ -15,6 +15,7 @@ import {
   unique,
   uuid,
 } from 'drizzle-orm/pg-core';
+import type { CamposDocumento } from '../../lib/documentos';
 
 /** Planilla adicional guardada dentro de una carga (corrección, ajuste de ARL...). */
 export type AdicionalGuardada = {
@@ -95,6 +96,12 @@ export const contratos = pgTable('contratos', {
    * supervisor la aprueba. Para entrar hace falta estado = 'activa' Y activo = true.
    */
   estado: text('estado').notNull().default('activa'),
+  /**
+   * Cuándo el supervisor marcó el contrato como "verificada" contra los PDF (contrato, acta o póliza). Si la contratista
+   * cambia después cualquier dato de su contrato ("mi contrato"), vuelve a null: hace falta revisarla otra vez.
+   * Lo que edita el supervisor no la borra.
+   */
+  verificadaEn: timestamp('verificada_en', { withTimezone: true }),
 });
 
 export type EstadoContrato = 'activa' | 'pendiente' | 'rechazada';
@@ -165,6 +172,31 @@ export const cambiosContrato = pgTable(
   (t) => [index('cambios_contrato_contrato_idx').on(t.contratoId), index('cambios_contrato_creado_idx').on(t.creado)],
 );
 
+/**
+ * PDF del contrato, del acta de prórroga o adición, o de la póliza que el supervisor sube para comparar con los datos de la
+ * app. `campos` y `notas` los saca el SERVIDOR con leerDocumento (nunca se confía en lo que lea el navegador). El PDF va a
+ * Blob privado (`archivo` = ruta; nunca se devuelve al navegador). Se borra junto con el contrato (la fila en cascada; el
+ * archivo, a mano en borrarContrato / rechazarSolicitud).
+ */
+export const documentos = pgTable(
+  'documentos',
+  {
+    id: serial('id').primaryKey(),
+    contratoId: integer('contrato_id')
+      .notNull()
+      .references(() => contratos.id, { onDelete: 'cascade' }),
+    /** 'contrato' | 'acta_prorroga' | 'poliza' | 'desconocido' */
+    tipo: text('tipo').notNull(),
+    nombreArchivo: text('nombre_archivo').notNull(),
+    /** Ruta (pathname) del PDF en Blob. */
+    archivo: text('archivo').notNull(),
+    campos: jsonb('campos').$type<CamposDocumento>().notNull(),
+    notas: jsonb('notas').$type<string[]>().notNull().default([]),
+    subido: timestamp('subido', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('documentos_contrato_idx').on(t.contratoId)],
+);
+
 /** Planillas subidas que todavía no se enviaron (caducan a las 6 h). */
 export const lecturas = pgTable(
   'lecturas',
@@ -199,3 +231,4 @@ export type ContratoFila = typeof contratos.$inferSelect;
 export type CargaFila = typeof cargas.$inferSelect;
 export type LecturaFila = typeof lecturas.$inferSelect;
 export type CambioContratoFila = typeof cambiosContrato.$inferSelect;
+export type DocumentoFila = typeof documentos.$inferSelect;

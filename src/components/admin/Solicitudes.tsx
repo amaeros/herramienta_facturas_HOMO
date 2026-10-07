@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { AdminError, apiAdmin, textoError, type Solicitud } from "./apiAdmin";
+import { AdminError, apiAdmin, textoError, type Contrato, type Solicitud } from "./apiAdmin";
 import Dialogo from "./Dialogo";
 import FormularioTrabajadora from "./FormularioTrabajadora";
 import PanelLateral from "./PanelLateral";
 import { fmtFecha } from "../formato";
-import { fmtFechaSolicitud, textoPendientes } from "./helpers";
+import { fmtFechaSolicitud, solicitudActualizada, textoPendientes } from "./helpers";
 import { useDatos } from "./useDatos";
 import css from "./admin.module.css";
 
@@ -15,11 +15,14 @@ function PanelSolicitud({
   id,
   onRechazar,
   onAprobada,
+  onActualizada,
   onCerrar,
 }: {
   id: number;
   onRechazar: () => void;
   onAprobada: (nombre: string, mensaje?: string) => void;
+  /** Se copió un dato de un documento: la lista de atrás se pone al día. */
+  onActualizada: (c: Contrato) => void;
   onCerrar: () => void;
 }) {
   const { datos, error, cargando, recargar } = useDatos(`solicitud-${id}`, () => apiAdmin.solicitud(id));
@@ -44,6 +47,7 @@ function PanelSolicitud({
           inicial={datos}
           solicitud={{ onRechazar }}
           onCancelar={onCerrar}
+          onActualizada={onActualizada}
           onGuardado={(c, mensaje) => onAprobada(c.nombre, mensaje)}
         />
       )}
@@ -180,6 +184,7 @@ export default function Solicitudes() {
             id={abierta.id}
             onRechazar={() => setRechazando(abierta)}
             onCerrar={() => setAbierta(null)}
+            onActualizada={(c) => modificar((l) => l.map((x) => (x.id === c.id ? solicitudActualizada(x, c) : x)))}
             onAprobada={(nombre, mensaje) => {
               quitar(abierta.id);
               setAbierta(null);

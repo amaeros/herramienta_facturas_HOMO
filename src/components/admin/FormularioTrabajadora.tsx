@@ -146,6 +146,7 @@ export default function FormularioTrabajadora({ inicial, solicitud, onGuardado, 
           <div className={css.rejilla2}>
             {campo("nombre", "Nombre completo", { ancho: true, hint: "Con este nombre la trabajadora entra desde el celular.", autoComplete: "off" })}
             {campo("cedula", "Cédula", { inputMode: "numeric", hint: "Solo números, sin puntos. Los últimos 4 son el PIN de la trabajadora." })}
+            {campo("cargo", "Cargo de la trabajadora", { opcional: true, hint: "El de su contrato. Sale en la cuenta de cobro debajo de su nombre." })}
             {campo("telefono", "Teléfono", { tipo: "tel", inputMode: "tel", opcional: true })}
             {campo("direccion", "Dirección", { opcional: true })}
             {campo("ciudad", "Ciudad", { opcional: true })}
@@ -157,7 +158,6 @@ export default function FormularioTrabajadora({ inicial, solicitud, onGuardado, 
           <legend>Contrato</legend>
           <div className={css.rejilla2}>
             {campo("numeroContrato", "Número del contrato", { opcional: true })}
-            {campo("cargo", "Cargo", { opcional: true })}
             {campo("linea", "Equipo o línea", { opcional: true, ancho: true })}
             {campo("objeto", "Objeto del contrato", { area: true, ancho: true, opcional: true, hint: "Es el texto que sale en la cuenta de cobro." })}
             {campo("inicio", "Fecha de inicio", { tipo: "date", opcional: true })}

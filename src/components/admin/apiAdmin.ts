@@ -139,6 +139,8 @@ export interface CambioContrato {
   etiqueta: string;
   antes: string;
   despues: string;
+  /** La contratista guardó un valor total distinto al que da su honorario por la vigencia. */
+  alerta: boolean;
   /** Fecha y hora ISO. */
   creado: string;
 }
@@ -301,6 +303,7 @@ export function normalizarCambio(raw: Crudo): CambioContrato {
     etiqueta: txt(g("etiqueta")) || campo,
     antes: txt(g("antes")),
     despues: txt(g("despues")),
+    alerta: g("alerta") === true,
     creado: txt(g("creado")),
   };
 }

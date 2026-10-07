@@ -154,6 +154,11 @@ input[aria-invalid=true], select[aria-invalid=true], textarea[aria-invalid=true]
 }
 .error-campo { margin: 6px 0 0; font-size: var(--t-ayuda); font-weight: 600; color: var(--rojo); }
 
+.marca-obligatorio { color: var(--tinta); font-weight: 700; }
+.nota-campo { color: var(--texto-suave); font-weight: 400; }
+.ayuda-campo { margin: -2px 0 8px; }
+.btn-en-franja { margin: 10px 0 0; }
+
 .dos { display: flex; gap: 10px; }
 .dos > * { flex: 1; min-width: 0; }
 

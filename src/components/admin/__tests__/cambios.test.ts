@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { normalizarCambio, type CambioContrato } from "../apiAdmin";
-import { contarDeContratistas, fmtFechaHoraCambio, lineaCambio, textoAutorCambio } from "../helpers";
+import { contarDeContratistas, fmtFechaHoraCambio, lineaCambio, TEXTO_ALERTA_CAMBIO, textoAutorCambio } from "../helpers";
 
 const base: CambioContrato = {
   id: 1, contratoId: 7, nombre: "Ana Prueba Ejemplo", autor: "contratista", campo: "fin", etiqueta: "Fecha de fin",
-  antes: "30/09/2026", despues: "30/11/2026", creado: "2026-10-07T15:04:00.000Z",
+  antes: "30/09/2026", despues: "30/11/2026", alerta: false, creado: "2026-10-07T15:04:00.000Z",
 };
 
 describe("bitácora de cambios", () => {
@@ -18,6 +18,25 @@ describe("bitácora de cambios", () => {
     expect(lineaCambio({ ...base, etiqueta: "Revisó (nombre)", antes: "(vacío)", despues: "Juan Pérez" })).toBe("Revisó (nombre): ahora es Juan Pérez");
     expect(lineaCambio({ ...base, etiqueta: "Revisó (cargo)", antes: "Apoyo", despues: "(vacío)" })).toBe("Revisó (cargo): se borró Apoyo");
     expect(lineaCambio({ ...base, antes: "", despues: "01/01/2026" })).toBe("Fecha de fin: ahora es 01/01/2026");
+  });
+
+  it("los datos personales no muestran valores: solo dicen que se actualizaron", () => {
+    const l = lineaCambio({ etiqueta: "Dirección", antes: "(dato personal)", despues: "(dato personal)" });
+    expect(l).toBe("Dirección: se actualizó (el dato no se guarda aquí)");
+    expect(l).not.toContain("de (dato personal)");
+  });
+
+  it("el texto de la alerta del valor total", () => {
+    expect(TEXTO_ALERTA_CAMBIO).toBe("Valor total distinto al esperado");
+  });
+
+  it("normaliza `alerta`: solo true cuenta", () => {
+    expect(normalizarCambio({ ...base, alerta: true }).alerta).toBe(true);
+    expect(normalizarCambio({ ...base, alerta: false }).alerta).toBe(false);
+    expect(normalizarCambio({ ...base, alerta: "true" }).alerta).toBe(false);
+    const { alerta: _quitado, ...sinAlerta } = base;
+    void _quitado;
+    expect(normalizarCambio(sinAlerta).alerta).toBe(false);
   });
 
   it("quién hizo el cambio", () => {

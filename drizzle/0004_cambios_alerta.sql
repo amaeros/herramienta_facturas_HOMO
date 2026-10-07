@@ -1,0 +1,1 @@
+ALTER TABLE "cambios_contrato" ADD COLUMN "alerta" boolean DEFAULT false NOT NULL;

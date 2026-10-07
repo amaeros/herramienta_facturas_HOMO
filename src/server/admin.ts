@@ -9,16 +9,24 @@ import type { BlobStore } from './blob';
 import type { Db } from './db';
 import { cargas, contratos, lecturas, parametros, type AdicionalGuardada, type ContratoFila, type Parametros } from './db/schema';
 import { CAMPOS_AUDITADOS_ADMIN, diferencias, registrarCambios } from './cambios';
-import { MENSAJE_FECHA_CONTRATO, MENSAJE_FIN_ANTES_DE_INICIO, monto, mesValido, normTxt } from './entrada';
+import {
+  CORREO_RE,
+  MAX_ENTERO,
+  MENSAJE_CORREO,
+  MENSAJE_FECHA_CONTRATO,
+  MENSAJE_FIN_ANTES_DE_INICIO,
+  MENSAJE_VALOR_TOTAL_MENOR,
+  monto,
+  mesValido,
+  normTxt,
+} from './entrada';
 import { ErrorAmable, ErrorValidacion } from './errores';
 import { MAX_BYTES_IMPORTAR, parsearExcelControl } from './importar';
 import { cargarParametros, mesActual, recalcularAcumulados, type Deps } from './servicios';
 
 const MSG_NO_TRABAJADORA = 'No encontramos a esa trabajadora.';
 const MSG_NO_CARGA = 'No encontramos esa cuenta de cobro.';
-const MAX_ENTERO = 2_000_000_000;
 const RIESGOS = ['I', 'II', 'III', 'IV', 'V'];
-const CORREO_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export type ContratoAdmin = ContratoFila & { cargas: number };
 
@@ -157,7 +165,7 @@ export function validarContrato(entrada: Record<string, unknown>, base: Contrato
   const honorario = dinero('honorario', 'El honorario');
   const valorTotal = dinero('valorTotal', 'El valor total del contrato');
   if (honorario !== null && valorTotal !== null && valorTotal < honorario && !err.valorTotal) {
-    err.valorTotal = 'El valor total del contrato no puede ser menor que el honorario mensual.';
+    err.valorTotal = MENSAJE_VALOR_TOTAL_MENOR;
   }
 
   // correo
@@ -165,7 +173,7 @@ export function validarContrato(entrada: Record<string, unknown>, base: Contrato
   {
     const v = get('correo');
     correo = vacio(v) ? '' : String(v).trim();
-    if (correo && (correo.length > 200 || !CORREO_RE.test(correo))) err.correo = 'El correo no tiene un formato válido (por ejemplo nombre@correo.com).';
+    if (correo && (correo.length > 200 || !CORREO_RE.test(correo))) err.correo = MENSAJE_CORREO;
   }
 
   // activo

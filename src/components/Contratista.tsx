@@ -11,6 +11,7 @@ import { datosDeInputs, faltaAlgo, INPUTS_VACIOS, inputsDeLectura, type Inputs }
 import PasoDatos, { type DiasEstado, type PeriodoEstado } from "./PasoDatos";
 import PasoFinal from "./PasoFinal";
 import PasoLogin from "./PasoLogin";
+import type { FormMiContrato } from "./miContrato";
 import PasoMiContrato from "./PasoMiContrato";
 import PasoVerificar from "./PasoVerificar";
 import Progreso from "./Progreso";
@@ -19,7 +20,8 @@ import type {
   RespLogin, RespMiContrato, RespPlanilla, Resumen,
 } from "./tipos";
 
-type Pantalla = "login" | "datos" | "contrato" | "cargando" | "verificar" | "final";
+/** "perfil" = "Antes de empezar" (primera vez); "contrato" = "Mis datos del contrato" (se abre desde el paso 2). */
+type Pantalla = "login" | "perfil" | "datos" | "contrato" | "cargando" | "verificar" | "final";
 
 const DIAS_VACIOS: DiasEstado = { activo: false, n: "", motivo: "" };
 const NOTA_NO_LEYO = "No pudimos leer tu planilla con seguridad. Escribe estos datos como aparecen en tu planilla.";
@@ -151,7 +153,8 @@ export default function Contratista() {
       setContrato(r.contrato);
       empezarMes(r.contrato, r.contrato.mesDefault);
       setAviso(null);
-      mostrar("datos");
+      // si le faltan datos del contrato, los completa primero (una sola vez)
+      mostrar(r.contrato.perfilCompleto ? "datos" : "perfil");
     } catch (e) {
       avisar(mensajeDeError(e));
     }
@@ -176,20 +179,22 @@ export default function Contratista() {
     return (await api<RespMiContrato>("/api/mi-contrato")).datos;
   }
 
-  async function guardarMiContrato(cambios: Partial<DatosMiContrato>): Promise<Resumen> {
+  async function guardarMiContrato(cambios: Partial<FormMiContrato>): Promise<RespGuardarMiContrato> {
     try {
-      return (await putJson<RespGuardarMiContrato>("/api/mi-contrato", cambios)).contrato;
+      return await putJson<RespGuardarMiContrato>("/api/mi-contrato", cambios);
     } catch (e) {
       if (esSesionVencida(e)) volverALogin(mensajeDeError(e));
       throw e;
     }
   }
 
-  /** Con el contrato ya guardado: se refresca la lista de meses (como tras entrar) y se vuelve al paso 2. */
+  /** Con el contrato ya guardado: se refresca la lista de meses (como tras entrar) y se sigue al paso 2. */
   function alGuardarMiContrato(c: Resumen) {
+    const primeraVez = pantalla === "perfil";
     setContrato(c);
     empezarMes(c, c.meses.some((m) => m.key === mesKey) ? mesKey : c.mesDefault);
-    avisar("Cambios guardados", "info");
+    if (primeraVez) setAviso(null);
+    else avisar("Cambios guardados", "info");
     mostrar("datos");
   }
 
@@ -432,7 +437,7 @@ export default function Contratista() {
   // ---------------------------------------------------------------- pintar
   return (
     <main className="contenido">
-      {pantalla !== "contrato" && <Progreso paso={pasoActual} />}
+      {pantalla !== "contrato" && pantalla !== "perfil" && <Progreso paso={pasoActual} />}
 
       {aviso && (
         <div className={"aviso " + aviso.tipo} role={aviso.tipo === "error" ? "alert" : "status"}>{aviso.msg}</div>
@@ -456,13 +461,16 @@ export default function Contratista() {
         />
       )}
 
-      {pantalla === "contrato" && contrato && (
+      {(pantalla === "perfil" || pantalla === "contrato") && contrato && (
         <PasoMiContrato
+          key={pantalla}
+          inicial={pantalla === "perfil"}
           cargar={cargarMiContrato}
           guardar={guardarMiContrato}
           avisar={avisar}
           limpiarAviso={limpiarAviso}
           onVolver={() => { setAviso(null); mostrar("datos"); }}
+          onSalir={salir}
           onGuardado={alGuardarMiContrato}
         />
       )}

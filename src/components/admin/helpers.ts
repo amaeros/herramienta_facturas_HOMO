@@ -126,14 +126,22 @@ export function fmtFechaHoraCambio(iso: string | null | undefined): string {
 }
 
 const SIN_VALOR = "(vacío)";
+const DATO_PERSONAL = "(dato personal)";
+
+/** Lo que se muestra en un cambio con `alerta`. */
+export const TEXTO_ALERTA_CAMBIO = "Valor total distinto al esperado";
 
 /** Quién hizo el cambio, en palabras. */
 export function textoAutorCambio(autor: string): string {
   return autor === "contratista" ? "La contratista" : "Supervisor";
 }
 
-/** 'Fecha de fin: de 30/09/2026 a 30/11/2026'. Si antes o después estaban vacíos, lo dice sin "de (vacío)". */
+/**
+ * 'Fecha de fin: de 30/09/2026 a 30/11/2026'. Si antes o después estaban vacíos, lo dice sin "de (vacío)".
+ * Los datos personales no se guardan: solo se dice que cambiaron.
+ */
 export function lineaCambio(c: Pick<CambioContrato, "etiqueta" | "antes" | "despues">): string {
+  if (c.antes === DATO_PERSONAL || c.despues === DATO_PERSONAL) return `${c.etiqueta}: se actualizó (el dato no se guarda aquí)`;
   const antesVacio = !c.antes || c.antes === SIN_VALOR;
   const despuesVacio = !c.despues || c.despues === SIN_VALOR;
   if (antesVacio && despuesVacio) return `${c.etiqueta}: cambió`;

@@ -2,7 +2,7 @@
 
 import { useId, useState } from "react";
 import { apiAdmin, type CambioContrato } from "./apiAdmin";
-import { contarDeContratistas, fmtFechaHoraCambio, lineaCambio, textoAutorCambio } from "./helpers";
+import { contarDeContratistas, fmtFechaHoraCambio, lineaCambio, TEXTO_ALERTA_CAMBIO, textoAutorCambio } from "./helpers";
 import { useDatos } from "./useDatos";
 import css from "./admin.module.css";
 
@@ -12,7 +12,10 @@ interface TablaProps {
   conNombre?: boolean;
 }
 
-/** Tabla de cambios al contrato. La franja de color marca los que hizo la contratista (para revisar). */
+/**
+ * Tabla de cambios al contrato. La franja de color marca los que hizo la contratista (para revisar);
+ * los que tienen alerta (valor total distinto al esperado) llevan además el texto que lo dice.
+ */
 function TablaCambios({ lista, conNombre }: TablaProps) {
   return (
     <div className={css.tablaCaja}>
@@ -27,11 +30,14 @@ function TablaCambios({ lista, conNombre }: TablaProps) {
         </thead>
         <tbody>
           {lista.map((c) => (
-            <tr key={c.id} className={c.autor === "contratista" ? css.estRev : css.estNeutro}>
+            <tr key={c.id} className={c.alerta || c.autor === "contratista" ? css.estRev : css.estNeutro}>
               <td data-label="Fecha">{fmtFechaHoraCambio(c.creado)}</td>
               {conNombre && <td data-label="Trabajadora" className={css.nombreFila}>{c.nombre}</td>}
               <td data-label="Quién"><span className={css.estadoTxt}>{textoAutorCambio(c.autor)}</span></td>
-              <td data-label="Cambio">{lineaCambio(c)}</td>
+              <td data-label="Cambio">
+                {lineaCambio(c)}
+                {c.alerta && <span className={css.alertaCambio}>{TEXTO_ALERTA_CAMBIO}</span>}
+              </td>
             </tr>
           ))}
         </tbody>

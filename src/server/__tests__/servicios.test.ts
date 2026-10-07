@@ -106,9 +106,15 @@ describe('resumen', () => {
     expect((await resumen(antes, fila)).mesDefault).toBe('2026-01');
   });
 
-  it('un contrato sin fechas o sin honorario no entra', async () => {
+  it('un contrato sin honorario no entra; sin fechas sí entra (las completa ella) pero no puede cobrar', async () => {
+    const sinHonorario = await crearContratista(db, { nombre: 'SIN HONORARIO', cedula: '1000000555', honorario: null });
+    expect((await fallo(login(deps, 'SIN HONORARIO', '0555'))).message).toMatch(/honorario/);
+    await db.delete(contratos).where(eq(contratos.id, sinHonorario));
+
     const o = await crearContratista(db, { nombre: 'SIN FECHAS', cedula: '1000000444', inicio: null });
-    expect((await fallo(login(deps, 'SIN FECHAS', '0444'))).message).toMatch(/fechas o el honorario/);
+    const r = (await login(deps, 'SIN FECHAS', '0444')).resumen;
+    expect(r).toMatchObject({ inicio: '', meses: [], mesDefault: '', perfilCompleto: false, faltan: ['Fecha de inicio'] });
+    expect((await fallo(enviar(deps, o, { mes: '2026-09', datos: OK, tempId: '' }))).message).toMatch(/fechas o el honorario/);
     await db.update(contratos).set({ activo: false }).where(eq(contratos.id, o));
     expect((await fallo(resumenDeSesion(deps, o))).estado).toBe(401); // sesión de un contrato inactivo
   });

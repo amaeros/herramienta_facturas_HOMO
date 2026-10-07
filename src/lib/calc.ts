@@ -254,6 +254,23 @@ export function cumulative(
   return { acumulado: sum, pct: total > 0 ? sum / total : 0 };
 }
 
+/**
+ * Valor total que da el honorario por toda la vigencia: la suma, mes a mes, del valor de cada mes
+ * (igual que `cumulative` cuando todavía no hay cuentas enviadas). null si faltan fechas u honorario.
+ */
+export function expectedTotal(inicio: unknown, fin: unknown, honorario: number | string | null | undefined): number | null {
+  const h = honorario === null || honorario === undefined || honorario === '' ? NaN : Number(honorario);
+  if (!isFinite(h) || h <= 0) return null;
+  const meses = monthsBetween(inicio, fin);
+  if (meses.length === 0) return null;
+  let sum = 0;
+  for (const k of meses) {
+    const p = expectedPeriod(k, String(inicio), String(fin))!;
+    sum += periodValue(h, commercialDays(p.inicio, p.corte));
+  }
+  return sum;
+}
+
 // -------------------------------------------------------- seguridad social
 /** Riesgo ARL vigente en un mes: el nuevo si el mes >= "Desde". */
 export function riskFor(contrato: Contrato, k: string): string {

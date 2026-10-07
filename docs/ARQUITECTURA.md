@@ -24,7 +24,7 @@ src/app/        pantallas: / (contratista, celular) · /admin (fase 3)
 | `cargas` | id, contrato_id, mes ('YYYY-MM'), fecha_inicio, fecha_corte, planilla_numero, planilla_mes ('YYYY-MM'), ss_declarada (int), adicionales (jsonb [{numero, mes, valor, archivo}]), dias_manual (int null), motivo_novedad, doc_num, dias, valor, acumulado, pct, ss_esperada, desglose, estado ('OK'/'REVISAR'/'ERROR'), mensaje, lectura ('auto'/'corregido'/'manual'), archivo_planilla (pathname blob), observacion, aprobado (bool), creado, actualizado. **UNIQUE (contrato_id, mes)**: reenviar el mismo mes REEMPLAZA la fila (y borra "aprobado") |
 | `lecturas` | temp_id (uuid), contrato_id, archivo (pathname blob), tipo, lectura (jsonb), leyo (bool), creado. Caducan a las 6 h |
 | `intentos_pin` | clave (nombre normalizado), fallos, bloqueado_hasta |
-| `cambios_contrato` | id, contrato_id (FK, **borra en cascada**), autor ('contratista'/'admin'), campo (camelCase: 'inicio', 'fin', 'revisoNombre', 'revisoCargo'...), antes, despues (texto ya legible: fechas DD/MM/AAAA, dinero `$7.174.000`, vacío = `(vacío)`), creado (timestamptz). Bitácora de cambios al contrato; nunca guarda datos personales |
+| `cambios_contrato` | id, contrato_id (FK, **borra en cascada**), autor ('contratista'/'admin'), campo (camelCase: 'inicio', 'fin', 'valorTotal', 'ciudad'...), antes, despues (texto ya legible: fechas DD/MM/AAAA, dinero `$7.174.000`, vacío = `(vacío)`; dirección, teléfono y correo siempre `(dato personal)`), alerta (bool, por defecto false: la contratista guardó un valor total distinto al esperado), creado (timestamptz). Bitácora de cambios al contrato; nunca guarda datos personales |
 
 Valores por defecto de `parametros` = los de PARAMETROS de la hoja (ver `legacy/apps-script/CONTRATO_DATOS.md`).
 
@@ -54,25 +54,33 @@ Todas: `{ok:true, ...}` o `{ok:false, error:'mensaje amable en español'}`. Erro
 | `POST /api/login` | `{nombre, pin}` | `contrato: Resumen` (+ cookie) |
 | `POST /api/logout` | — | — |
 | `GET /api/sesion` | cookie | `contrato: Resumen` (para refrescar tras enviar) |
-| `GET /api/mi-contrato` | cookie | `datos:{inicio, fin, revisoNombre, revisoCargo}` (fechas `AAAA-MM-DD`, o `''` si el contrato aún no las tiene) |
-| `PUT /api/mi-contrato` | cookie + `{inicio?, fin?, revisoNombre?, revisoCargo?}` | `datos` (lo guardado) + `contrato: Resumen` (para refrescar la lista de meses) |
+| `GET /api/mi-contrato` | cookie | `datos:{direccion, telefono, ciudad, correo, cargo, objeto, inicio, fin, valorTotal, revisoNombre, revisoCargo, valorTotalEsperado}` (fechas `AAAA-MM-DD`, o `''` si el contrato aún no las tiene; `valorTotal` y `valorTotalEsperado`: número o `null`) |
+| `PUT /api/mi-contrato` | cookie + cualquiera de las 11 claves de arriba (sin `valorTotalEsperado`) | `datos` (lo guardado) + `contrato: Resumen` (para refrescar la lista de meses y `perfilCompleto`) + `aviso?` (valor total distinto al esperado; no bloquea) |
 | `POST /api/evaluar` | `{mes, fechaInicio, fechaCorte, datos:{numero, periodo, salud, pension, arl}, adicionales:[{numero, periodo, valor, tempId}], diasManual:{dias, motivo}\|null}` | `evaluacion` (= `Calc.evaluate`) — no guarda nada |
 | `POST /api/planilla` | multipart: `archivo` (File), `texto` (texto que extrajo pdf.js en el navegador, puede venir vacío), `mes`, `fechaInicio`, `fechaCorte`, `adicionales` (JSON), `diasManual` (JSON), `adicional` ('1' si es planilla adicional) | `tempId, leyo, confianza, tipoDoc, fuente:'navegador'\|'ninguna', notas[], lectura:{numero, periodo, salud, pension, arl}, evaluacion\|null, valor\|null` |
 | `POST /api/enviar` | `{mes, fechaInicio, fechaCorte, datos, tempId, adicionales, diasManual}` | `estado, estadoTexto, emoji, mensaje, factura:{nombre, url}` (url = `/api/factura/<cargaId>`) |
 | `GET /api/factura/[id]` | cookie de la contratista dueña (o admin) | el .xlsx (`Content-Disposition: attachment`) |
 
-`Resumen` = `{nombre, numeroContrato, honorario, inicio, fin, riesgo, meses:[{key, label, inicio, corte, dias, valor, enviado}], mesDefault}` (igual que `resumenContrato_` del legacy; `enviado` = estadoTexto de la carga de ese mes o '').
+`Resumen` = `{nombre, numeroContrato, honorario, inicio, fin, riesgo, meses:[{key, label, inicio, corte, dias, valor, enviado}], mesDefault, perfilCompleto, faltan}` (igual que `resumenContrato_` del legacy; `enviado` = estadoTexto de la carga de ese mes o ''). `perfilCompleto` (bool) y `faltan` (etiquetas legibles: 'Dirección', 'Fecha de fin'...) salen de `faltanDelPerfil` (`src/server/perfil.ts`): el perfil está completo cuando dirección, teléfono, ciudad, cargo, objeto, inicio, fin, valor total, nombre y cargo de quien revisa tienen algo (el correo es opcional). Para entrar basta con el honorario: si faltan las fechas, `meses:[]`, `mesDefault:''`, `inicio/fin:''` y la contratista las escribe en "Antes de empezar"; para enviar una cuenta sí hacen falta.
 
 ### Mi contrato (`/api/mi-contrato`)
 
-La contratista edita **solo 4 campos de su propio contrato**: fecha de inicio, fecha de fin, "Revisó (nombre)" y "Revisó (cargo)". Todo lo demás (honorario, valor total, riesgo, n.º de contrato, nombre, cédula...) lo cambia solo el supervisor: si llega en el cuerpo, **se ignora** sin error.
+La contratista llena y corrige **11 campos de su propio contrato**: `direccion`, `telefono`, `ciudad`, `correo` (opcional), `cargo`, `objeto`, `inicio`, `fin`, `valorTotal`, `revisoNombre` y `revisoCargo`. Todo lo demás (nombre, cédula, n.º de contrato, honorario, riesgo, riesgo nuevo/desde, línea, activo) lo cambia solo el supervisor: si llega en el cuerpo, **se ignora** sin error.
 
-- `PUT` solo mira las 4 claves en camelCase; lo que no viene se conserva. Si no viene ninguna de las 4 → 400 `No hay nada que guardar.`
-- Validación (todos los errores juntos): `inicio`/`fin` texto `AAAA-MM-DD` real y **no vacíos** si se mandan; `fin >= inicio` (si solo viene uno, se compara con el guardado); `revisoNombre`/`revisoCargo` texto, recortado, máx. 120 caracteres (puede quedar vacío).
-- Error: `400 {ok:false, error, campos:{ inicio?, fin?, revisoNombre?, revisoCargo? }}` (`error` = el primer mensaje). Sin sesión, o contrato desactivado → `401 {ok:false, error:'Tu sesión venció. Vuelve a entrar.'}`.
-- Escribe **una fila de `cambios_contrato` por campo que de verdad cambió** (mandar el mismo valor no anota nada), y corre `recalcularAcumulados` (acumulado/% de las cargas dentro del nuevo periodo; el valor de cada mes no se re-evalúa). Las cuentas ya enviadas conservan su `contrato_snapshot`.
-- La edición del admin (`PUT /api/admin/contratos/[id]`) también anota sus cambios, con `autor:'admin'` (los 4 campos y además n.º de contrato, objeto, honorario, valor total, riesgo, riesgo nuevo/desde y activa; nunca cédula, dirección, teléfono ni correo).
+- `PUT` solo mira esas 11 claves en camelCase; lo que no viene se conserva. Si no viene ninguna → 400 `No hay nada que guardar.`
+- Validación (todos los errores juntos), todo recortado: ninguno de los 10 obligatorios puede quedar vacío si se manda; máximos `direccion` 150, `ciudad` 80, `cargo` 120, `objeto` 1500, `revisoNombre`/`revisoCargo` 120, `correo` 200; `telefono` solo dígitos, espacios y `+` con 7 a 15 dígitos; `correo` formato `a@b.c` (o vacío); `inicio`/`fin` `AAAA-MM-DD` reales y `fin >= inicio` (si solo viene uno, se compara con el guardado); `valorTotal` en pesos (acepta `"$ 44.099.000"`, `44099000` o número), mayor que cero, no menor que el honorario y hasta 2.000.000.000. Reutiliza las reglas del admin (`src/server/entrada.ts`).
+- Error: `400 {ok:false, error, campos:{ <campo>: mensaje }}` (`error` = el primer mensaje). Sin sesión, o contrato desactivado → `401 {ok:false, error:'Tu sesión venció. Vuelve a entrar.'}`.
+- **Valor total esperado** (`valorTotalEsperado`, `expectedTotal` en `src/lib/calc.ts`): la suma, mes a mes de `monthsBetween(inicio, fin)`, de `periodValue(honorario, commercialDays(periodo esperado))`, o sea lo mismo que suma `cumulative` cuando todavía no hay cuentas. Un inicio el 16/01 cuenta enero con 15 días. `null` si faltan fechas u honorario.
+- **Aviso (no bloquea):** si el `PUT` trae `valorTotal` y lo guardado difiere de `valorTotalEsperado` (calculado con las fechas ya guardadas), la respuesta trae `aviso` con las dos cifras ("Revísalo con tu acta; si tu acta dice otra cifra, déjalo así."). Se guarda igual.
+- Escribe **una fila de `cambios_contrato` por campo que de verdad cambió** (mandar el mismo valor no anota nada). Dirección, teléfono y correo se anotan como `(dato personal)` en `antes` y `despues`: nunca su valor. La fila de `valorTotal` lleva `alerta: true` cuando lo guardado difiere del esperado. Corre `recalcularAcumulados` (acumulado/% de las cargas dentro del nuevo periodo; el valor de cada mes no se re-evalúa). Las cuentas ya enviadas conservan su `contrato_snapshot`.
+- La edición del admin (`PUT /api/admin/contratos/[id]`) también anota sus cambios, con `autor:'admin'` (inicio, fin, quién revisa, n.º de contrato, objeto, honorario, valor total, riesgo, riesgo nuevo/desde y activa; nunca cédula, dirección, teléfono, correo, ciudad ni cargo) y nunca con `alerta`.
 - El supervisor los ve en `GET /api/admin/cambios` (ver `docs/ADMIN.md`).
+
+### Pantallas de la contratista para estos datos
+
+- Tras el login (`Contratista.tsx`), si `perfilCompleto` es `false` se muestra **"Antes de empezar, completa tus datos"** (antes del paso 2, fuera de los 4 pasos, sin barra de progreso) y recién después el paso 2. Manda **todos** los campos con "Guardar y continuar".
+- "Revisar mis datos del contrato" (paso 2) abre el mismo formulario (`PasoMiContrato`, prop `inicial`) con "Guardar cambios": manda solo lo que cambió.
+- Si la respuesta trae `aviso`, se muestra en una franja ámbar bajo el valor total con "Continuar de todas formas"; cualquier edición la quita y se vuelve a guardar. Helpers puros y sus pruebas: `src/components/miContrato.ts`.
 
 Reglas de `/api/planilla` y `/api/enviar`: copiar la lógica de `api_leerPlanilla` / `procesarEnvio_` del legacy:
 texto del navegador si tiene ≥150 caracteres (si no, `fuente:'ninguna'` y la contratista escribe los datos a mano; **no hay OCR**);

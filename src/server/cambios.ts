@@ -1,6 +1,6 @@
 // Bitácora de cambios al contrato (tabla cambios_contrato): la escriben "mi contrato" (contratista) y la edición del
 // panel de admin; la lee el supervisor en GET /api/admin/cambios. Ver docs/ADMIN.md.
-// No se guardan datos personales (ni cédula, ni dirección, ni teléfono): solo campos del contrato.
+// Los datos personales (dirección, teléfono, correo) nunca se guardan: el cambio queda anotado como "(dato personal)".
 
 import { desc, eq } from 'drizzle-orm';
 import { fmtFecha, fmtMoney } from '../lib/calc';
@@ -10,6 +10,12 @@ import { ErrorAmable } from './errores';
 import type { Deps } from './servicios';
 
 export type AutorCambio = 'contratista' | 'admin';
+
+/** Lo que se anota en lugar del valor de un dato personal. */
+export const DATO_PERSONAL = '(dato personal)';
+
+/** Campos cuyo valor NUNCA se guarda en la bitácora. */
+export const CAMPOS_PERSONALES: ReadonlySet<string> = new Set(['direccion', 'telefono', 'correo']);
 
 /** Etiqueta legible de cada campo auditado (lo que ve el supervisor). */
 export const ETIQUETAS_CAMPO: Record<string, string> = {
@@ -25,14 +31,45 @@ export const ETIQUETAS_CAMPO: Record<string, string> = {
   riesgoNuevo: 'Riesgo ARL nuevo',
   riesgoDesde: 'Riesgo ARL nuevo desde',
   activo: 'Trabajadora activa',
+  // los que solo cambia la contratista (los admin no se anotan: ver CAMPOS_AUDITADOS_ADMIN)
+  direccion: 'Dirección',
+  telefono: 'Teléfono',
+  correo: 'Correo',
+  ciudad: 'Ciudad',
+  cargo: 'Cargo',
 };
 
-/** Los 4 campos que la contratista puede editar de su propio contrato. */
-export const CAMPOS_CONTRATISTA = ['inicio', 'fin', 'revisoNombre', 'revisoCargo'] as const;
+/** Los campos que la contratista puede editar de su propio contrato, en el orden de la pantalla. */
+export const CAMPOS_CONTRATISTA = [
+  'direccion',
+  'telefono',
+  'ciudad',
+  'correo',
+  'cargo',
+  'objeto',
+  'inicio',
+  'fin',
+  'valorTotal',
+  'revisoNombre',
+  'revisoCargo',
+] as const;
 export type CampoContratista = (typeof CAMPOS_CONTRATISTA)[number];
 
-/** Campos que se anotan cuando los cambia el admin (sin datos personales). */
-export const CAMPOS_AUDITADOS_ADMIN = Object.keys(ETIQUETAS_CAMPO);
+/** Campos que se anotan cuando los cambia el admin (sin datos personales, igual que siempre). */
+export const CAMPOS_AUDITADOS_ADMIN = [
+  'inicio',
+  'fin',
+  'revisoNombre',
+  'revisoCargo',
+  'numeroContrato',
+  'objeto',
+  'honorario',
+  'valorTotal',
+  'riesgo',
+  'riesgoNuevo',
+  'riesgoDesde',
+  'activo',
+];
 
 const CAMPOS_FECHA = new Set(['inicio', 'fin', 'riesgoDesde']);
 const CAMPOS_DINERO = new Set(['honorario', 'valorTotal']);
@@ -47,16 +84,20 @@ export function textoDeCampo(campo: string, v: unknown): string {
   return String(v);
 }
 
-export type Diferencia = { campo: string; antes: string; despues: string };
+export type Diferencia = { campo: string; antes: string; despues: string; alerta?: boolean };
 
-/** Campos de `campos` cuyo valor cambió entre `antes` y `despues` (null y '' cuentan como lo mismo). */
+/**
+ * Campos de `campos` cuyo valor cambió entre `antes` y `despues` (null y '' cuentan como lo mismo).
+ * Los datos personales se anotan como "(dato personal)": nunca su valor.
+ */
 export function diferencias(antes: Partial<ContratoFila>, despues: Partial<ContratoFila>, campos: readonly string[]): Diferencia[] {
   const res: Diferencia[] = [];
   for (const campo of campos) {
     const a = (antes as Record<string, unknown>)[campo] ?? '';
     const d = (despues as Record<string, unknown>)[campo] ?? '';
     if (a === d) continue;
-    res.push({ campo, antes: textoDeCampo(campo, a), despues: textoDeCampo(campo, d) });
+    if (CAMPOS_PERSONALES.has(campo)) res.push({ campo, antes: DATO_PERSONAL, despues: DATO_PERSONAL });
+    else res.push({ campo, antes: textoDeCampo(campo, a), despues: textoDeCampo(campo, d) });
   }
   return res;
 }
@@ -70,7 +111,8 @@ export async function registrarCambios(
 ): Promise<void> {
   if (lista.length === 0) return;
   const creado = deps.ahora ? deps.ahora() : new Date();
-  await deps.db.insert(cambiosContrato).values(lista.map((d) => ({ contratoId, autor, campo: d.campo, antes: d.antes, despues: d.despues, creado })));
+  await deps.db.insert(cambiosContrato).values(lista.map((d) => ({ contratoId, autor, campo: d.campo, antes: d.antes, despues: d.despues, alerta: d.alerta === true, creado })),
+  );
 }
 
 // =================================================================== lectura (supervisor)
@@ -83,6 +125,8 @@ export type CambioAdmin = {
   etiqueta: string;
   antes: string;
   despues: string;
+  /** La contratista guardó un valor total distinto al que da su honorario por la vigencia. */
+  alerta: boolean;
   creado: Date;
 };
 
@@ -108,6 +152,7 @@ export async function listarCambios(db: Db, contratoIdPedido?: unknown): Promise
     etiqueta: ETIQUETAS_CAMPO[c.campo] ?? c.campo,
     antes: c.antes,
     despues: c.despues,
+    alerta: c.alerta,
     creado: c.creado,
   }));
 }

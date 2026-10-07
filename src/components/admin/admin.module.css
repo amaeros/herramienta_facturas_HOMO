@@ -124,6 +124,7 @@
 .estErr { --est: var(--rojo); }
 .estNeutro { --est: var(--texto-suave); }
 .estadoTxt { font-weight: 700; }
+.alertaCambio { display: block; margin-top: 2px; font-weight: 700; color: var(--ambar); }
 .estOk .estadoTxt { color: var(--verde-homo); }
 .estRev .estadoTxt { color: var(--ambar); }
 .estErr .estadoTxt { color: var(--rojo); }

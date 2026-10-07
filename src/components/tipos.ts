@@ -22,14 +22,27 @@ export interface Resumen {
   riesgo: string;
   meses: MesInfo[];
   mesDefault: string;
+  /** Sus datos del contrato ya están completos (el correo es opcional y no cuenta). */
+  perfilCompleto: boolean;
+  /** Lo que todavía falta, con nombres para mostrar ('Dirección', 'Fecha de fin'...). */
+  faltan: string[];
 }
 
-/** Los 4 datos del contrato que la contratista puede cambiar (GET y PUT /api/mi-contrato). Fechas 'AAAA-MM-DD' o ''. */
+/** Los datos del contrato que la contratista puede cambiar (GET y PUT /api/mi-contrato). Fechas 'AAAA-MM-DD' o ''. */
 export interface DatosMiContrato {
+  direccion: string;
+  telefono: string;
+  ciudad: string;
+  correo: string;
+  cargo: string;
+  objeto: string;
   inicio: string;
   fin: string;
+  valorTotal: number | null;
   revisoNombre: string;
   revisoCargo: string;
+  /** Lo que da el honorario por toda la vigencia (null si faltan fechas). */
+  valorTotalEsperado: number | null;
 }
 
 export interface RespMiContrato {
@@ -39,6 +52,8 @@ export interface RespMiContrato {
 
 export interface RespGuardarMiContrato extends RespMiContrato {
   contrato: Resumen;
+  /** El valor total no coincide con el que da el honorario. No bloquea. */
+  aviso?: string;
 }
 
 /** Datos de la planilla principal tal como van a /api/evaluar y /api/enviar. */

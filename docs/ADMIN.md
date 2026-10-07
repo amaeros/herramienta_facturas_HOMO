@@ -51,14 +51,15 @@ Validaciones (mensajes amables, en español, indicando el campo):
 
 ## Bitácora de cambios al contrato
 
-La contratista puede editar 4 campos de su contrato desde el celular (`PUT /api/mi-contrato`: fechas de inicio y fin, "Revisó (nombre)" y "Revisó (cargo)"; ver `docs/ARQUITECTURA.md`). Cada cambio, y los que hace el supervisor al editar una trabajadora (`PUT /api/admin/contratos/[id]`), queda anotado en `cambios_contrato`.
+La contratista llena y corrige 11 datos de su contrato desde el celular (`PUT /api/mi-contrato`: dirección, teléfono, ciudad, correo, cargo, objeto, fechas de inicio y fin, valor total y quién revisa; la primera vez, en la pantalla "Antes de empezar, completa tus datos"; ver `docs/ARQUITECTURA.md`). Cada cambio, y los que hace el supervisor al editar una trabajadora (`PUT /api/admin/contratos/[id]`), queda anotado en `cambios_contrato`.
 
 | Ruta | Entrada | Salida |
 |---|---|---|
-| `GET /api/admin/cambios?contratoId=<id>` | `contratoId` opcional (entero). Sin él: los de todas las trabajadoras. Mal escrito → 400 | `cambios: [{id, contratoId, nombre, autor, campo, etiqueta, antes, despues, creado}]`, del más nuevo al más viejo, **máximo 100** |
+| `GET /api/admin/cambios?contratoId=<id>` | `contratoId` opcional (entero). Sin él: los de todas las trabajadoras. Mal escrito → 400 | `cambios: [{id, contratoId, nombre, autor, campo, etiqueta, antes, despues, alerta, creado}]`, del más nuevo al más viejo, **máximo 100** |
 
 - `autor` = `'contratista'` o `'admin'`; `creado` = fecha ISO (UTC); `antes`/`despues` ya vienen legibles (fechas `DD/MM/AAAA`, dinero `$7.174.000`, vacío = `(vacío)`).
-- `etiqueta` = nombre para mostrar: `inicio` → "Fecha de inicio", `fin` → "Fecha de fin", `revisoNombre` → "Revisó (nombre)", `revisoCargo` → "Revisó (cargo)"; el admin además anota `numeroContrato`, `objeto`, `honorario`, `valorTotal`, `riesgo`, `riesgoNuevo`, `riesgoDesde` y `activo` (nunca datos personales).
+- `alerta` (bool): `true` cuando la contratista guardó un **valor total distinto al que da su honorario por la vigencia**. En "Cambios recientes" y en el historial de cada trabajadora esa fila lleva la franja ámbar y el texto "Valor total distinto al esperado". El admin nunca genera alertas.
+- `etiqueta` = nombre para mostrar: `inicio` → "Fecha de inicio", `fin` → "Fecha de fin", `revisoNombre` → "Revisó (nombre)", `revisoCargo` → "Revisó (cargo)", `valorTotal` → "Valor total del contrato", `objeto` → "Objeto del contrato", `direccion` → "Dirección", `telefono` → "Teléfono", `correo` → "Correo", `ciudad` → "Ciudad", `cargo` → "Cargo". Los tres datos personales (dirección, teléfono, correo) **nunca guardan su valor**: `antes` y `despues` son `(dato personal)` y la pantalla dice "se actualizó". El admin además anota `numeroContrato`, `objeto`, `honorario`, `valorTotal`, `riesgo`, `riesgoNuevo`, `riesgoDesde` y `activo` (nunca datos personales, ciudad ni cargo).
 - Solo se anota lo que realmente cambió. Si se borra la trabajadora, su bitácora se borra con ella.
 - Sin cookie de admin → 401.
 

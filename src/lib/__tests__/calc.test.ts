@@ -51,6 +51,19 @@ eq('Mes fuera de vigencia -> null', Calc.expectedPeriod('2025-12', ANA.inicio, A
 eq('Meses del contrato Ana: 9', Calc.monthsBetween(ANA.inicio, ANA.fin).length, 9);
 eq('N.º documento sep 2026', Calc.docNumber('2026-09'), 202609);
 
+section('Valor total esperado de la vigencia');
+eq('Ana (9 meses completos): 64.566.000', Calc.expectedTotal(ANA.inicio, ANA.fin, ANA.honorario), 64566000);
+eq('Laura (empieza el 16/01): 3.587.000 + 8 meses = 60.979.000', Calc.expectedTotal(LAURA.inicio, LAURA.fin, LAURA.honorario), 60979000);
+eq('Coincide con cumulative sin cuentas enviadas', Calc.expectedTotal(LAURA.inicio, LAURA.fin, LAURA.honorario), Calc.cumulative(LAURA, '2026-09', {}).acumulado);
+eq('Erika (empieza el 28/01): 506.400 + 8 meses', Calc.expectedTotal(ERIKA.inicio, ERIKA.fin, ERIKA.honorario), 506400 + 8 * 5064000);
+eq('Termina el 15/09: el último mes cuenta 15 días', Calc.expectedTotal('2026-01-01', '2026-09-15', 7174000), 8 * 7174000 + 3587000);
+eq('Termina el 31/12: cuenta 30 días', Calc.expectedTotal('2026-01-01', '2026-12-31', 7174000), 12 * 7174000);
+eq('Honorario como texto', Calc.expectedTotal('2026-01-01', '2026-03-31', '1000000'), 3000000);
+eq('Sin honorario -> null', Calc.expectedTotal('2026-01-01', '2026-03-31', null), null);
+eq('Honorario cero -> null', Calc.expectedTotal('2026-01-01', '2026-03-31', 0), null);
+eq('Sin fechas -> null', Calc.expectedTotal('', '2026-03-31', 7174000), null);
+eq('Fin antes del inicio -> null', Calc.expectedTotal('2026-05-01', '2026-03-31', 7174000), null);
+
 section('Seguridad social esperada');
 let s = Calc.expectedSS(7174000, 'III', PARAMS);
 eq('7.174.000 riesgo III: 358.700 + 459.200 + 70.000 = 887.900', [s.salud, s.pension, s.arl, s.total], [358700, 459200, 70000, 887900]);

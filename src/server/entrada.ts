@@ -94,6 +94,12 @@ export const MENSAJE_FECHA_CONTRATO = {
 } as const;
 export const MENSAJE_FIN_ANTES_DE_INICIO = 'La fecha de fin no puede ser antes de la fecha de inicio.';
 
+/** Reglas que comparten el panel de admin y "mi contrato" de la contratista. */
+export const MAX_ENTERO = 2_000_000_000;
+export const CORREO_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export const MENSAJE_CORREO = 'El correo no tiene un formato válido (por ejemplo nombre@correo.com).';
+export const MENSAJE_VALOR_TOTAL_MENOR = 'El valor total del contrato no puede ser menor que el honorario mensual.';
+
 export function fechaValida(s: unknown): string {
   const t = texto(s).trim();
   return parseYMD(t) ? t : '';

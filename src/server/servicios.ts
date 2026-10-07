@@ -48,6 +48,7 @@ import {
 } from './entrada';
 import { ErrorAmable, MENSAJE_SESION } from './errores';
 import { verificarLogin } from './auth';
+import { faltanDelPerfil } from './perfil';
 
 export type Deps = { db: Db; blob: BlobStore; ahora?: () => Date };
 
@@ -76,6 +77,10 @@ export type Resumen = {
   riesgo: string;
   meses: MesResumen[];
   mesDefault: string;
+  /** Los datos que salen en su cuenta de cobro ya están completos (el correo no cuenta). */
+  perfilCompleto: boolean;
+  /** Etiquetas de lo que todavía falta ('Dirección', 'Fecha de fin'...). Vacío si el perfil está completo. */
+  faltan: string[];
 };
 
 export type PedidoEvaluar = {
@@ -165,9 +170,17 @@ export async function contratoActivo(db: Db, contratoId: number): Promise<Contra
   return c;
 }
 
+/** Para cobrar hacen falta el honorario (solo lo pone el supervisor) y las fechas (las puede escribir ella). */
 function validarContratoCompleto(c: ContratoFila): void {
   if (!c.inicio || !c.fin || c.honorario === null || !isFinite(c.honorario)) {
     throw new ErrorAmable('Tu contrato no tiene las fechas o el honorario completos. Avisa a tu supervisor.');
+  }
+}
+
+/** Para entrar basta con el honorario: las fechas faltantes las completa ella en "Antes de empezar". */
+function validarHonorario(c: ContratoFila): void {
+  if (c.honorario === null || !isFinite(c.honorario)) {
+    throw new ErrorAmable('Tu contrato no tiene el honorario. Avisa a tu supervisor.');
   }
 }
 
@@ -192,9 +205,9 @@ export function mesActual(d: Date): string {
 }
 
 export async function resumen(deps: Deps, c: ContratoFila): Promise<Resumen> {
-  validarContratoCompleto(c);
+  validarHonorario(c);
   const cc = contratoCalc(c);
-  const meses = monthsBetween(cc.inicio, cc.fin);
+  const meses = monthsBetween(cc.inicio, cc.fin); // [] si ella todavía no escribió las fechas
   const filas = await deps.db.select({ mes: cargas.mes, estado: cargas.estado }).from(cargas).where(eq(cargas.contratoId, c.id));
   const porMes: Record<string, string> = {};
   for (const f of filas) porMes[f.mes] = f.estado;
@@ -213,16 +226,19 @@ export async function resumen(deps: Deps, c: ContratoFila): Promise<Resumen> {
     };
   });
   const hoy = mesActual(ahoraDe(deps));
-  const def = meses.indexOf(hoy) >= 0 ? hoy : hoy < meses[0] ? meses[0] : meses[meses.length - 1];
+  const def = meses.length === 0 ? '' : meses.indexOf(hoy) >= 0 ? hoy : hoy < meses[0] ? meses[0] : meses[meses.length - 1];
+  const faltan = faltanDelPerfil(c);
   return {
     nombre: c.nombre,
     numeroContrato: c.numeroContrato,
     honorario: c.honorario as number,
-    inicio: c.inicio as string,
-    fin: c.fin as string,
-    riesgo: riskFor(cc, def),
+    inicio: c.inicio ?? '',
+    fin: c.fin ?? '',
+    riesgo: def ? riskFor(cc, def) : c.riesgo,
     meses: lista,
     mesDefault: def,
+    perfilCompleto: faltan.length === 0,
+    faltan,
   };
 }
 

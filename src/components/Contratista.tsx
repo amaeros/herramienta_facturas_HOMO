@@ -10,7 +10,7 @@ import type { HojaDatos } from "./Hoja";
 import { datosDeInputs, faltaAlgo, INPUTS_VACIOS, inputsDeLectura, type Inputs } from "./lectura";
 import PasoDatos from "./PasoDatos";
 import PasoFinal from "./PasoFinal";
-import { diasManualDeMotivo, esError, MES_COMPLETO, periodoElegido, type EleccionPeriodo } from "./periodo";
+import { esError, MES_COMPLETO, periodoElegido, type EleccionPeriodo } from "./periodo";
 import PasoLogin from "./PasoLogin";
 import type { FormMiContrato } from "./miContrato";
 import PasoMiContrato from "./PasoMiContrato";
@@ -197,9 +197,9 @@ export default function Contratista() {
     return { inicio: mes?.inicio ?? "", corte: mes?.corte ?? "" };
   }
 
-  /** La herramienta cuenta los días sola: lo único que viaja en `diasManual` es el motivo (con los días ya contados). */
+  /** La herramienta cuenta los días sola a partir de las fechas: nunca se mandan días a mano. */
   function diasManualActual(): DiasManualPayload | null {
-    return elegido ? diasManualDeMotivo(eleccion.opcion, elegido, eleccion.motivo) : null;
+    return null;
   }
 
   function adicionalesPayload(lista: Adicional[] = adicionales) {

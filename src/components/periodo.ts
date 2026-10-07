@@ -4,7 +4,7 @@
  */
 import { commercialDays, daysInMonth, parseMonth, parseYMD, periodValue } from "../lib/calc";
 import { fmtFecha, labelMes } from "./formato";
-import type { DiasManualPayload, MesInfo } from "./tipos";
+import type { MesInfo } from "./tipos";
 
 export type OpcionPeriodo = "completo" | "dias";
 
@@ -14,14 +14,13 @@ export interface EleccionPeriodo {
   /** AAAA-MM-DD */
   del: string;
   al: string;
-  motivo: string;
 }
 
-export const MES_COMPLETO: EleccionPeriodo = { opcion: "completo", del: "", al: "", motivo: "" };
+export const MES_COMPLETO: EleccionPeriodo = { opcion: "completo", del: "", al: "" };
 
 /** Al marcar "Solo unos días" las fechas arrancan en las del mes completo, para que el calendario abra en el mes correcto. */
 export function eleccionSoloDias(mes: Pick<MesInfo, "inicio" | "corte">): EleccionPeriodo {
-  return { opcion: "dias", del: mes.inicio, al: mes.corte, motivo: "" };
+  return { opcion: "dias", del: mes.inicio, al: mes.corte };
 }
 
 export interface VigenciaContrato {
@@ -98,20 +97,4 @@ export function periodoElegido(
   const dias = commercialDays(del, al);
   if (dias === null || dias < 1) return { error: "No pudimos contar los días. Revisa las dos fechas.", campo: "al" };
   return { inicio: del, corte: al, dias, valor: periodValue(contrato.honorario, dias) };
-}
-
-/**
- * El motivo no tiene campo propio en la API: solo viaja dentro de `diasManual` ({ dias, motivo }).
- * Se manda únicamente cuando eligió "Solo unos días" con un rango válido y escribió un motivo; los días van
- * ya contados por la herramienta (los mismos del rango), nunca escritos a mano. Si no, null.
- */
-export function diasManualDeMotivo(
-  opcion: OpcionPeriodo,
-  elegido: PeriodoElegido | PeriodoInvalido,
-  motivo: string,
-): DiasManualPayload | null {
-  const m = motivo.replace(/\s+/g, " ").trim();
-  if (opcion !== "dias" || !m || esError(elegido)) return null;
-  if (!Number.isInteger(elegido.dias) || elegido.dias < 1 || elegido.dias > 30) return null;
-  return { dias: String(elegido.dias), motivo: m };
 }

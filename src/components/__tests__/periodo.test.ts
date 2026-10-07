@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { commercialDays, expectedPeriod, monthLabel, periodValue } from "../../lib/calc";
 import {
-  diasManualDeMotivo, eleccionSoloDias, esError, limitesDelMes, MES_COMPLETO, periodoElegido, type PeriodoElegido,
+  eleccionSoloDias, esError, limitesDelMes, MES_COMPLETO, periodoElegido, type PeriodoElegido,
 } from "../periodo";
 import type { MesInfo } from "../tipos";
 
@@ -125,24 +125,10 @@ describe("limitesDelMes", () => {
   });
 });
 
-describe("eleccion y motivo", () => {
+describe("eleccion", () => {
   it("al marcar «Solo unos días» las fechas arrancan en las del mes", () => {
     const mes = mesDe("2026-01", CONTRATO_16.inicio, CONTRATO_16.fin);
-    expect(eleccionSoloDias(mes)).toEqual({ opcion: "dias", del: "2026-01-16", al: "2026-01-30", motivo: "" });
+    expect(eleccionSoloDias(mes)).toEqual({ opcion: "dias", del: "2026-01-16", al: "2026-01-30" });
     expect(MES_COMPLETO.opcion).toBe("completo");
-  });
-
-  const sep = mesDe("2026-09", CONTRATO.inicio, CONTRATO.fin);
-
-  it("el motivo viaja con los días ya contados, nunca escritos a mano", () => {
-    const e = periodoElegido(sep, CONTRATO, "dias", "2026-09-01", "2026-09-10");
-    expect(diasManualDeMotivo("dias", e, "  licencia   no remunerada ")).toEqual({ dias: "10", motivo: "licencia no remunerada" });
-  });
-
-  it("sin motivo, con el mes completo o con fechas malas no se manda nada", () => {
-    const bueno = periodoElegido(sep, CONTRATO, "dias", "2026-09-01", "2026-09-10");
-    expect(diasManualDeMotivo("dias", bueno, "   ")).toBeNull();
-    expect(diasManualDeMotivo("completo", periodoElegido(sep, CONTRATO, "completo", "", ""), "licencia")).toBeNull();
-    expect(diasManualDeMotivo("dias", periodoElegido(sep, CONTRATO, "dias", "2026-09-20", "2026-09-10"), "licencia")).toBeNull();
   });
 });

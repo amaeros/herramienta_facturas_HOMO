@@ -133,19 +133,6 @@ export default function PasoDatos({ contrato: c, mes, eleccion, elegido, hoja, o
               {!esError(elegido) ? elegido.dias + " " + (elegido.dias === 1 ? "día" : "días") + ": " + fmtMoney(elegido.valor) : ""}
             </p>
             <p className="ayuda ayuda-campo">Contamos los días con mes de 30 días. El 31 cuenta como 30.</p>
-
-            <div className="campo">
-              <label htmlFor="f-motivo">Motivo <span className="nota-campo">(opcional)</span></label>
-              <input
-                id="f-motivo"
-                type="text"
-                maxLength={200}
-                autoComplete="off"
-                placeholder="Ej. suspensión, licencia"
-                value={eleccion.motivo}
-                onChange={(e) => onEleccion({ ...eleccion, motivo: e.target.value })}
-              />
-            </div>
           </div>
         )}
       </div>

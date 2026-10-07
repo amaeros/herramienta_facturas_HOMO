@@ -61,7 +61,8 @@ const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', '
 let plantillaEnMemoria: Buffer | null = null;
 async function leerPlantilla(): Promise<Buffer> {
   if (!plantillaEnMemoria) {
-    plantillaEnMemoria = await fs.promises.readFile(path.join(process.cwd(), ...RUTA_PLANTILLA));
+    // la plantilla entra al paquete por outputFileTracingIncludes (next.config.ts), no por trazado
+    plantillaEnMemoria = await fs.promises.readFile(path.join(/*turbopackIgnore: true*/ process.cwd(), ...RUTA_PLANTILLA));
   }
   return plantillaEnMemoria;
 }

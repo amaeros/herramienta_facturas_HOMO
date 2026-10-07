@@ -34,7 +34,7 @@ export function secretoSesion(): string {
   return s;
 }
 
-function firmar(datos: string, secreto: string): string {
+export function firmar(datos: string, secreto: string): string {
   return createHmac('sha256', secreto).update(datos).digest('base64url');
 }
 
@@ -79,7 +79,7 @@ const MSG_BLOQUEO =
 const MSG_PIN = 'El nombre o el PIN no son correctos. El PIN son los últimos 4 números de tu cédula.';
 
 /** Suma un fallo de forma atómica. El contador vuelve a 1 si el último fallo fue hace más de 10 min. */
-async function registrarFallo(db: Db, clave: string, ahora: Date): Promise<void> {
+export async function registrarFallo(db: Db, clave: string, ahora: Date): Promise<void> {
   const iso = ahora.toISOString();
   const ventana = new Date(ahora.getTime() - VENTANA_PIN_MS).toISOString();
   const hasta = new Date(ahora.getTime() + VENTANA_PIN_MS).toISOString();

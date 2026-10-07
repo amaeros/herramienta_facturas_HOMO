@@ -53,6 +53,8 @@ export const contratos = pgTable('contratos', {
   cargo: text('cargo').notNull().default(''),
   numeroContrato: text('numero_contrato').notNull().default(''),
   objeto: text('objeto').notNull().default(''),
+  /** "Línea política pública" (viene del Excel de control). */
+  linea: text('linea').notNull().default(''),
   inicio: date('inicio', { mode: 'string' }),
   fin: date('fin', { mode: 'string' }),
   honorario: integer('honorario'),

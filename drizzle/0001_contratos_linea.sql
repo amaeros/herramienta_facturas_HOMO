@@ -1,0 +1,1 @@
+ALTER TABLE "contratos" ADD COLUMN "linea" text DEFAULT '' NOT NULL;

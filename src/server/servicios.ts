@@ -397,6 +397,8 @@ export async function recalcularAcumulados(db: Db, c: ContratoFila): Promise<voi
   for (const f of filas) valores[f.mes] = f.valor;
   for (const f of filas) {
     const a = cumulative(cc, f.mes, valores);
+    // contrato incompleto (sin honorario): no se puede calcular, se deja como estaba
+    if (!Number.isFinite(a.acumulado) || !Number.isFinite(a.pct)) continue;
     if (a.acumulado !== f.acumulado || Math.abs(a.pct - f.pct) > 1e-12) {
       await db.update(cargas).set({ acumulado: a.acumulado, pct: a.pct }).where(eq(cargas.id, f.id));
     }

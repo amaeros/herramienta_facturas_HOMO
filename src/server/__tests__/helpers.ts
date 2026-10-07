@@ -30,6 +30,18 @@ export class BlobFalso implements BlobStore {
   async del(pathnames: string[]) {
     for (const p of pathnames) this.archivos.delete(p);
   }
+  async get(pathname: string) {
+    const a = this.archivos.get(pathname);
+    if (!a) return null;
+    const body = a.body;
+    const stream = new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(new Uint8Array(body));
+        c.close();
+      },
+    });
+    return { stream, contentType: a.contentType, size: body.length };
+  }
 }
 
 export const AHORA = new Date('2026-09-15T17:00:00Z'); // 12:00 en Bogotá, septiembre de 2026
@@ -90,4 +102,35 @@ export function textoPlanilla(o: { numero?: string; periodo?: string; salud?: nu
     'CCF (ADMINISTRADORA: 1) $ 0',
     `TOTAL 4 ${f(salud + pension + arl)} $ 0`,
   ].join('\n');
+}
+
+/** Inserta una carga ya calculada (sin pasar por enviar). Datos inventados. */
+export async function crearCarga(
+  db: Db,
+  contratoId: number,
+  mes: string,
+  over: Partial<typeof schema.cargas.$inferInsert> = {},
+): Promise<number> {
+  const [y, m] = mes.split('-').map(Number);
+  const [c] = await db
+    .insert(schema.cargas)
+    .values({
+      contratoId,
+      mes,
+      fechaInicio: `${mes}-01`,
+      fechaCorte: `${mes}-${m === 2 ? '28' : '30'}`,
+      planillaNumero: '1234567890',
+      planillaMes: mes,
+      ssDeclarada: 541800,
+      ssEsperada: 541800,
+      docNum: y * 100 + m,
+      dias: 30,
+      valor: 4009000,
+      estado: 'OK',
+      mensaje: 'Todo cuadra.',
+      lectura: 'auto',
+      ...over,
+    })
+    .returning({ id: schema.cargas.id });
+  return c.id;
 }

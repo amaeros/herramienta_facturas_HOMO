@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<base target="_top">
+<title>Cuenta de cobro HOMO</title>
+<!-- pdf.js (capa de texto real del PDF, sin OCR). Dos etiquetas script UMD normales: el segundo deja globalThis.pdfjsWorker y pdf.js
+     usa el "fake worker" en el hilo principal (un Worker de otro origen falla en el sandbox de Apps Script).
+     Si cdnjs no responde, la app sigue igual: no se manda texto y el servidor lee el archivo con OCR. -->
+<script async src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" onerror="window.pdfjsFalla = true"></script>
+<script async src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js" onerror="window.pdfjsFalla = true"></script>
+<style>
+  :root {
+    --verde: #0b5640;
+    --verde2: #018d38;
+    --verde-claro: #e8f4ee;
+    --texto: #1c2a25;
+    --gris: #5c6b65;
+    --borde: #c9d6cf;
+    --fondo: #f4f7f5;
+    --blanco: #ffffff;
+    --ok: #0a7a34; --ok-bg: #e6f5ec;
+    --rev: #8a6100; --rev-bg: #fff6d6;
+    --err: #b3261e; --err-bg: #fdeceb;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--fondo); color: var(--texto);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 18px; line-height: 1.45;
+  }
+  header.top { background: var(--verde); color: #fff; padding: 16px 16px 14px; }
+  header.top .marca { font-size: 14px; letter-spacing: .04em; text-transform: uppercase; opacity: .85; }
+  header.top h1 { margin: 2px 0 0; font-size: 24px; line-height: 1.2; }
+  main { max-width: 560px; margin: 0 auto; padding: 16px; }
+  .paso { font-size: 14px; color: var(--gris); margin: 0 0 8px; font-weight: 600; }
+  h2 { font-size: 22px; margin: 4px 0 12px; color: var(--verde); line-height: 1.25; }
+  h3 { font-size: 18px; margin: 18px 0 8px; color: var(--verde); }
+  p { margin: 0 0 12px; }
+  .card { background: var(--blanco); border: 1px solid var(--borde); border-radius: 14px; padding: 16px; margin-bottom: 16px; }
+  .ayuda { font-size: 15px; color: var(--gris); }
+  label { display: block; font-weight: 600; margin: 0 0 6px; }
+  select, input[type=text], input[type=password], input[type=date], input[type=tel] {
+    width: 100%; min-height: 56px; padding: 12px 14px; font-size: 18px; color: var(--texto);
+    border: 2px solid var(--borde); border-radius: 12px; background: #fff; font-family: inherit;
+  }
+  select:focus, input:focus, button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px solid var(--verde2); outline-offset: 2px; }
+  .campo { margin-bottom: 16px; }
+  .btn {
+    display: flex; align-items: center; justify-content: center; text-align: center; width: 100%; min-height: 58px;
+    padding: 12px 16px; font-size: 19px; font-weight: 700; border-radius: 14px; border: 2px solid var(--verde);
+    background: var(--verde); color: #fff; cursor: pointer; font-family: inherit; text-decoration: none; margin-bottom: 12px;
+  }
+  .btn:hover { background: var(--verde2); border-color: var(--verde2); }
+  .btn.sec { background: #fff; color: var(--verde); }
+  .btn.sec:hover { background: var(--verde-claro); }
+  .btn.peligro { background: #fff; color: var(--err); border-color: var(--err); }
+  .btn[disabled] { opacity: .45; cursor: not-allowed; }
+  .link { background: none; border: 0; padding: 8px 0; color: var(--verde2); font-size: 16px; text-decoration: underline; cursor: pointer; font-family: inherit; }
+  .fila { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid #e6ede9; align-items: center; }
+  .fila:last-child { border-bottom: 0; }
+  .fila .et { color: var(--gris); font-size: 16px; }
+  .fila .val { font-weight: 700; text-align: right; word-break: break-word; }
+  .dato { margin-bottom: 14px; }
+  .dato .et { font-weight: 600; font-size: 16px; margin-bottom: 4px; display: block; }
+  .dato.falta input, .dato.falta select { border-color: var(--err); background: var(--err-bg); }
+  .dos { display: flex; gap: 10px; }
+  .dos > * { flex: 1; }
+  .semaforo { border-radius: 16px; padding: 18px 16px; margin-bottom: 16px; border: 3px solid; text-align: center; }
+  .semaforo .emoji { font-size: 64px; line-height: 1; display: block; margin-bottom: 8px; }
+  .semaforo .titulo { font-size: 22px; font-weight: 800; margin-bottom: 6px; }
+  .semaforo .msg { font-size: 18px; text-align: left; }
+  .semaforo.ok { background: var(--ok-bg); border-color: var(--ok); color: #064d20; }
+  .semaforo.rev { background: var(--rev-bg); border-color: #d9a400; color: #5a4000; }
+  .semaforo.err { background: var(--err-bg); border-color: var(--err); color: #7a1611; }
+  .semaforo.gris { background: #eef1ef; border-color: #b7c2bc; color: #3a4640; }
+  .aviso { border-radius: 12px; padding: 12px 14px; margin-bottom: 16px; font-size: 16px; }
+  .aviso.info { background: var(--verde-claro); border: 1px solid #b7d8c6; }
+  .aviso.error { background: var(--err-bg); border: 1px solid #efb5b1; color: #7a1611; }
+  .aviso.warn { background: var(--rev-bg); border: 1px solid #ecd27a; color: #5a4000; }
+  [hidden] { display: none !important; }
+  .cargando { text-align: center; padding: 40px 8px; }
+  .rueda { width: 56px; height: 56px; margin: 0 auto 18px; border: 6px solid var(--verde-claro); border-top-color: var(--verde2); border-radius: 50%; animation: gira 1s linear infinite; }
+  @keyframes gira { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .rueda { animation-duration: 3s; } }
+  details { margin-bottom: 14px; }
+  summary { cursor: pointer; color: var(--verde2); font-weight: 600; padding: 6px 0; font-size: 16px; }
+  details svg { max-width: 100%; height: auto; margin: 8px 0; border: 1px solid var(--borde); border-radius: 10px; background: #fff; }
+  ol.leyenda { padding-left: 22px; font-size: 16px; margin: 6px 0; }
+  ol.leyenda li { margin-bottom: 4px; }
+  .pie { text-align: center; font-size: 13px; color: var(--gris); padding: 8px 16px 28px; }
+  .subir input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+  .adic-lista { list-style: none; padding: 0; margin: 0 0 12px; }
+  .adic-lista li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; margin-bottom: 8px; border: 1px solid var(--borde); border-radius: 12px; background: var(--fondo); font-size: 16px; }
+  .adic-lista .quitar { background: none; border: 0; color: var(--err); font-weight: 700; font-size: 16px; text-decoration: underline; cursor: pointer; min-height: 44px; padding: 0 6px; font-family: inherit; }
+  .adic-form { border-top: 2px dashed var(--borde); padding-top: 14px; margin-top: 6px; }
+  h4 { font-size: 17px; margin: 0 0 10px; color: var(--verde); }
+  .pin-wrap { position: relative; }
+  .pin-wrap button { position: absolute; right: 6px; top: 6px; min-height: 44px; padding: 0 12px; border: 0; background: none; color: var(--verde2); font-size: 16px; font-weight: 600; cursor: pointer; }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="marca">Hospital Mental de Antioquia · HOMO</div>
+  <h1>Tu cuenta de cobro</h1>
+</header>
+
+<main>
+  <div id="banner" class="aviso error" role="alert" hidden></div>
+
+  <!-- ============ Pantalla 1: entrar ============ -->
+  <section id="p-login">
+    <p class="paso">Paso 1 de 4 · Entrar</p>
+    <h2>¿Quién eres?</h2>
+    <div class="card">
+      <div class="campo">
+        <label for="nombre">Escoge tu nombre</label>
+        <select id="nombre"><option value="">Cargando la lista…</option></select>
+      </div>
+      <div class="campo">
+        <label for="pin">Tu PIN (4 números)</label>
+        <div class="pin-wrap">
+          <input id="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="••••">
+          <button type="button" id="ver-pin" aria-label="Mostrar u ocultar el PIN">Ver</button>
+        </div>
+        <p class="ayuda" style="margin-top:6px">Tu PIN son los <strong>últimos 4 números de tu cédula</strong>.</p>
+      </div>
+      <button class="btn" id="btn-entrar" type="button">Entrar</button>
+    </div>
+  </section>
+
+  <!-- ============ Pantalla 2: mes y planilla ============ -->
+  <section id="p-datos" hidden>
+    <p class="paso">Paso 2 de 4 · Mes y planilla</p>
+    <h2 id="saludo">Hola</h2>
+    <div class="card">
+      <div class="fila"><span class="et">Contrato n.º</span><span class="val" id="d-contrato"></span></div>
+      <div class="fila"><span class="et">Honorario mensual</span><span class="val" id="d-honorario"></span></div>
+    </div>
+
+    <div class="card">
+      <div class="campo">
+        <label for="mes">Mes a cobrar</label>
+        <select id="mes"></select>
+      </div>
+      <div id="ya-enviado" class="aviso warn" hidden>Ya enviaste este mes. Si subes otra planilla, reemplazará tu envío anterior.</div>
+      <div id="periodo-lectura">
+        <div class="fila"><span class="et">Desde</span><span class="val" id="d-inicio"></span></div>
+        <div class="fila"><span class="et">Hasta</span><span class="val" id="d-corte"></span></div>
+        <div class="fila"><span class="et">Días · Valor del mes</span><span class="val" id="d-valor"></span></div>
+        <button type="button" class="link" id="btn-cambiar-fechas">¿Tuviste una novedad? Cambiar fechas</button>
+      </div>
+      <div id="periodo-edicion" hidden>
+        <div class="aviso info">Cambia las fechas solo si empezaste o terminaste a mitad de mes. Tu supervisor las revisará.</div>
+        <div class="dos">
+          <div class="campo"><label for="f-inicio">Desde</label><input id="f-inicio" type="date"></div>
+          <div class="campo"><label for="f-corte">Hasta</label><input id="f-corte" type="date"></div>
+        </div>
+        <button type="button" class="link" id="btn-restaurar-fechas">Volver a las fechas normales</button>
+      </div>
+      <div id="dias-bloque" hidden>
+        <button type="button" class="link" id="btn-dias">¿Este mes se cobran días distintos? (suspensión, licencia, novedad)</button>
+        <div id="dias-edicion" hidden>
+          <div class="aviso info">Úsalo solo si este mes se cobran más o menos días que los normales. El valor será tu honorario × días ÷ 30. Tu supervisor lo revisará.</div>
+          <div class="campo"><label for="dias-n">Días a cobrar (de 1 a 30)</label>
+            <input id="dias-n" type="tel" inputmode="numeric" maxlength="2" autocomplete="off" placeholder="Ej. 20"></div>
+          <div class="campo"><label for="dias-motivo">Motivo (obligatorio)</label>
+            <input id="dias-motivo" type="text" maxlength="200" autocomplete="off" placeholder="Ej. Licencia no remunerada del 1 al 10"></div>
+          <p class="ayuda" id="dias-calculo"></p>
+          <button type="button" class="link" id="btn-dias-quitar">Volver a los días normales</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card subir">
+      <h3 style="margin-top:0">Sube tu planilla de seguridad social</h3>
+      <p class="ayuda">Es la planilla PILA que pagaste (PDF o una foto clara). Normalmente es del mes que vas a cobrar o del mes anterior. Si pagaste más de una planilla (una corrección, por ejemplo), sube aquí la principal y después podrás agregar las otras.</p>
+      <label class="btn" for="archivo" style="cursor:pointer">Elegir PDF o foto</label>
+      <input id="archivo" type="file" accept="application/pdf,image/*">
+      <label class="btn sec" for="archivo-cam" style="cursor:pointer">Tomar una foto ahora</label>
+      <input id="archivo-cam" type="file" accept="image/*" capture="environment">
+      <p class="ayuda" style="margin:0">Máximo 10 MB. Solo PDF, JPG o PNG.</p>
+    </div>
+    <button type="button" class="link" id="btn-salir-1">Salir</button>
+  </section>
+
+  <!-- ============ Cargando ============ -->
+  <section id="p-cargando" hidden>
+    <div class="cargando" role="status" aria-live="polite">
+      <div class="rueda"></div>
+      <h2 id="cargando-titulo">Leyendo tu planilla…</h2>
+      <p id="cargando-texto" class="ayuda">Esto puede tardar hasta 30 segundos. No cierres esta pantalla.</p>
+    </div>
+  </section>
+
+  <!-- ============ Pantalla 3-4: verificación ============ -->
+  <section id="p-verificar" hidden>
+    <p class="paso">Paso 3 de 4 · Revisa</p>
+    <h2 id="ver-titulo">Esto leímos de tu planilla</h2>
+    <div id="ver-nota" class="aviso info" hidden></div>
+
+    <div class="card">
+      <div id="lectura-vista">
+        <div class="fila"><span class="et">N.º de planilla</span><span class="val" id="v-numero"></span></div>
+        <div class="fila"><span class="et">Mes cotizado</span><span class="val" id="v-periodo"></span></div>
+        <div class="fila"><span class="et">Salud</span><span class="val" id="v-salud"></span></div>
+        <div class="fila"><span class="et">Pensión</span><span class="val" id="v-pension"></span></div>
+        <div class="fila"><span class="et">ARL (riesgos laborales)</span><span class="val" id="v-arl"></span></div>
+      </div>
+      <div id="lectura-edicion" hidden>
+        <div class="dato" id="c-numero"><label class="et" for="i-numero">N.º de planilla (solo números)</label>
+          <input id="i-numero" type="tel" inputmode="numeric" autocomplete="off" placeholder="Ej. 9509633245"></div>
+        <div class="dato" id="c-periodo"><span class="et">Mes cotizado</span>
+          <div class="dos"><select id="i-mes" aria-label="Mes cotizado"></select><select id="i-anio" aria-label="Año cotizado"></select></div></div>
+        <div class="dato" id="c-salud"><label class="et" for="i-salud">Salud ($)</label>
+          <input id="i-salud" type="tel" inputmode="numeric" autocomplete="off" placeholder="Ej. 358.700"></div>
+        <div class="dato" id="c-pension"><label class="et" for="i-pension">Pensión ($)</label>
+          <input id="i-pension" type="tel" inputmode="numeric" autocomplete="off" placeholder="Ej. 459.200"></div>
+        <div class="dato" id="c-arl"><label class="et" for="i-arl">ARL ($)</label>
+          <input id="i-arl" type="tel" inputmode="numeric" autocomplete="off" placeholder="Ej. 70.000"></div>
+        <p class="ayuda">Escribe solo el valor de <strong>salud, pensión y ARL</strong>. No sumes caja de compensación ni intereses de mora.</p>
+      </div>
+      <button type="button" class="btn sec" id="btn-corregir" style="margin-top:12px">Corregir datos</button>
+      <button type="button" class="btn" id="btn-revisar" hidden>Revisar de nuevo</button>
+
+      <details id="ayuda-donde">
+        <summary>¿Dónde encuentro cada dato en mi planilla?</summary>
+        <svg viewBox="0 0 320 250" role="img" aria-label="Dibujo de ejemplo de una planilla con los datos señalados">
+          <rect x="6" y="6" width="308" height="238" rx="8" fill="#fafafa" stroke="#9fb2a8"/>
+          <rect x="16" y="16" width="150" height="16" rx="3" fill="#dfe8e3"/>
+          <text x="22" y="28" font-size="10" fill="#3a4640">PLANILLA INTEGRADA DE LIQUIDACIÓN</text>
+          <rect x="196" y="14" width="112" height="24" rx="4" fill="#fff3c4" stroke="#d9a400" stroke-width="2"/>
+          <text x="202" y="24" font-size="8" fill="#5a4000">N.º de planilla / Clave</text>
+          <text x="202" y="34" font-size="10" fill="#5a4000" font-weight="bold">9509633245</text>
+          <circle cx="188" cy="26" r="9" fill="#0b5640"/><text x="184.5" y="30" font-size="11" fill="#fff" font-weight="bold">1</text>
+          <rect x="16" y="52" width="180" height="26" rx="4" fill="#fff3c4" stroke="#d9a400" stroke-width="2"/>
+          <text x="22" y="63" font-size="8" fill="#5a4000">Periodo de pago (salud y pensión)</text>
+          <text x="22" y="74" font-size="10" fill="#5a4000" font-weight="bold">2026-09  Septiembre</text>
+          <circle cx="208" cy="65" r="9" fill="#0b5640"/><text x="204.5" y="69" font-size="11" fill="#fff" font-weight="bold">2</text>
+          <rect x="16" y="98" width="288" height="16" fill="#dfe8e3"/>
+          <text x="22" y="110" font-size="9" fill="#3a4640">Subsistema</text><text x="150" y="110" font-size="9" fill="#3a4640">Valor liquidado</text>
+          <rect x="16" y="120" width="288" height="18" fill="#fff3c4" stroke="#d9a400" stroke-width="2"/>
+          <text x="22" y="133" font-size="10" fill="#5a4000">Salud (EPS)</text><text x="222" y="133" font-size="10" fill="#5a4000" font-weight="bold">$ 358.700</text>
+          <circle cx="292" cy="129" r="9" fill="#0b5640"/><text x="288.5" y="133" font-size="11" fill="#fff" font-weight="bold">3</text>
+          <rect x="16" y="142" width="288" height="18" fill="#fff3c4" stroke="#d9a400" stroke-width="2"/>
+          <text x="22" y="155" font-size="10" fill="#5a4000">Pensión (AFP)</text><text x="222" y="155" font-size="10" fill="#5a4000" font-weight="bold">$ 459.200</text>
+          <circle cx="292" cy="151" r="9" fill="#0b5640"/><text x="288.5" y="155" font-size="11" fill="#fff" font-weight="bold">4</text>
+          <rect x="16" y="164" width="288" height="18" fill="#fff3c4" stroke="#d9a400" stroke-width="2"/>
+          <text x="22" y="177" font-size="10" fill="#5a4000">Riesgos laborales (ARL)</text><text x="222" y="177" font-size="10" fill="#5a4000" font-weight="bold">$ 70.000</text>
+          <circle cx="292" cy="173" r="9" fill="#0b5640"/><text x="288.5" y="177" font-size="11" fill="#fff" font-weight="bold">5</text>
+          <rect x="16" y="186" width="288" height="18" fill="#f1f1f1"/>
+          <text x="22" y="199" font-size="10" fill="#8a8a8a">Caja de compensación · intereses de mora (no van)</text>
+          <text x="16" y="228" font-size="9" fill="#5c6b65">Ejemplo: tu planilla puede verse distinta, busca las mismas palabras.</text>
+        </svg>
+        <ol class="leyenda">
+          <li><strong>N.º de planilla:</strong> arriba, dice «Número de planilla», «Planilla n.º» o «Clave».</li>
+          <li><strong>Mes cotizado:</strong> «Periodo de pago» o «Periodo de cotización» de salud y pensión.</li>
+          <li><strong>Salud, pensión y ARL:</strong> el valor liquidado de cada uno, sin caja de compensación ni intereses de mora.</li>
+        </ol>
+      </details>
+    </div>
+
+    <div class="card subir" id="adic-card" hidden>
+      <h3 style="margin-top:0">¿Pagaste más de una planilla?</h3>
+      <p class="ayuda">Si este mes pagaste una corrección, un ajuste de ARL u otra planilla (por ejemplo de un mes anterior), agrégala para que salga en tu cuenta de cobro. Puedes agregar hasta 3.</p>
+      <ul id="adic-lista" class="adic-lista" aria-label="Planillas adicionales agregadas"></ul>
+      <button type="button" class="btn sec" id="btn-adic-abrir">＋ Agregar otra planilla (corrección o adicional)</button>
+      <div id="adic-form" class="adic-form" hidden>
+        <h4 id="adic-titulo">Otra planilla</h4>
+        <label class="btn sec" for="archivo-adic" style="cursor:pointer">Subir el PDF o la foto de esa planilla (opcional)</label>
+        <input id="archivo-adic" type="file" accept="application/pdf,image/*">
+        <p class="ayuda" id="adic-estado" role="status" hidden></p>
+        <div class="dato" id="ca-numero"><label class="et" for="a-numero">N.º de planilla (solo números)</label>
+          <input id="a-numero" type="tel" inputmode="numeric" autocomplete="off" placeholder="Ej. 9509700001"></div>
+        <div class="dato" id="ca-periodo"><span class="et">Mes cotizado de esa planilla</span>
+          <div class="dos"><select id="a-mes" aria-label="Mes cotizado"></select><select id="a-anio" aria-label="Año cotizado"></select></div></div>
+        <div class="dato" id="ca-valor"><label class="et" for="a-valor">Valor pagado sin intereses de mora ($)</label>
+          <input id="a-valor" type="tel" inputmode="numeric" autocomplete="off" placeholder="Ej. 21.400">
+          <p class="ayuda" style="margin:6px 0 0">Escribe <strong>un solo valor</strong>: el total que pagaste en esa planilla (lo que sumaste de salud, pensión y ARL), <strong>sin los intereses de mora</strong>. Siempre en positivo, aunque sea una corrección.</p></div>
+        <div id="adic-error" class="aviso error" role="alert" hidden></div>
+        <button type="button" class="btn" id="btn-adic-agregar">Agregar esta planilla</button>
+        <button type="button" class="link" id="btn-adic-cancelar">Cancelar</button>
+      </div>
+    </div>
+
+    <div id="semaforo" class="semaforo gris" aria-live="polite"></div>
+
+    <button type="button" class="btn" id="btn-enviar">Enviar y generar mi cuenta de cobro</button>
+    <button type="button" class="btn sec" id="btn-otra">Subir otra planilla</button>
+  </section>
+
+  <!-- ============ Pantalla 5: final ============ -->
+  <section id="p-final" hidden>
+    <p class="paso">Paso 4 de 4 · Listo</p>
+    <div id="semaforo-final" class="semaforo gris" aria-live="polite"></div>
+    <div id="final-aviso" class="aviso warn" hidden></div>
+    <div id="final-descarga" hidden>
+      <button type="button" class="btn" id="btn-descargar">Descargar cuenta de cobro (Excel)</button>
+      <button type="button" class="btn sec" id="btn-descargar-pdf">Descargar en PDF</button>
+      <p class="ayuda" id="final-nota-pdf">El Excel es el que entregas; el PDF es una copia para leer o imprimir.</p>
+      <a class="btn sec" id="btn-abrir" href="#" target="_blank" rel="noopener" hidden>Abrir el archivo</a>
+      <div class="aviso info"><strong>Recuerda:</strong> firma la cuenta de cobro y entrégala con tu informe de actividades.</div>
+      <p class="ayuda" id="final-correo" hidden>También te la enviamos a tu correo.</p>
+    </div>
+    <div id="final-error" class="aviso info" hidden>No pudimos crear la cuenta de cobro (Excel ni PDF) en este momento. Tu envío quedó registrado y tu supervisor puede generarlo desde la hoja.</div>
+    <button type="button" class="btn sec" id="btn-otro-mes">Enviar otro mes</button>
+    <button type="button" class="link" id="btn-salir-2">Salir</button>
+  </section>
+</main>
+<p class="pie">Si algo no funciona, habla con tu supervisor.</p>
+
+<script>
+(function () {
+  'use strict';
+
+  var MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+  var MAX_BYTES = 10 * 1024 * 1024;
+  var S = {
+    nombre: '', pin: '', contrato: null, mes: '', fechasEditables: false, tempId: '', leyo: false,
+    datos: { numero: '', periodo: '', salud: null, pension: null, arl: null },
+    evaluacion: null, edicion: false, sucio: false, facturaXlsx: null, facturaPdf: null, ocupado: false,
+    adicionales: [], adicTemp: '', diasActivo: false
+  };
+
+  function $(id) { return document.getElementById(id); }
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+
+  // ---------------------------------------------------------------- utilidades
+  function fmtMoney(n) {
+    if (n === null || n === undefined || n === '' || isNaN(Number(n))) return '—';
+    var s = String(Math.round(Math.abs(Number(n)))), out = '';
+    while (s.length > 3) { out = '.' + s.slice(-3) + out; s = s.slice(0, -3); }
+    return '$' + s + out;
+  }
+  function fmtFecha(ymd) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd || '');
+    return m ? m[3] + '/' + m[2] + '/' + m[1] : '—';
+  }
+  function labelMes(k) {
+    var m = /^(\d{4})-(\d{2})$/.exec(k || '');
+    return m ? MESES[Number(m[2]) - 1] + ' ' + m[1] : '—';
+  }
+  function tituloNombre(s) { return String(s).toLowerCase().replace(/(^|\s)\S/g, function (c) { return c.toUpperCase(); }); }
+  function soloNumero(s) {
+    s = String(s === null || s === undefined ? '' : s).replace(/[$\s]/g, '');
+    if (!s) return null;
+    if (/^\d{1,3}([.,]\d{3})+$/.test(s)) return Number(s.replace(/[.,]/g, ''));
+    if (/^\d{1,3}([.,]\d{3})+[.,]\d{1,2}$/.test(s)) return Number(s.replace(/[.,]\d{1,2}$/, '').replace(/[.,]/g, ''));
+    if (/^\d+$/.test(s)) return Number(s);
+    if (/^\d+[.,]\d{1,2}$/.test(s)) return Math.round(Number(s.replace(',', '.')));
+    return null;
+  }
+  function dinero(n) { return n === null || n === undefined ? '' : fmtMoney(n).replace('$', ''); }
+
+  function banner(msg, tipo) {
+    var b = $('banner');
+    if (!msg) { b.hidden = true; return; }
+    b.className = 'aviso ' + (tipo || 'error');
+    b.textContent = msg;
+    b.hidden = false;
+    window.scrollTo(0, 0);
+  }
+
+  function mostrar(id) {
+    ['p-login', 'p-datos', 'p-cargando', 'p-verificar', 'p-final'].forEach(function (x) { $(x).hidden = (x !== id); });
+    window.scrollTo(0, 0);
+  }
+
+  function cargando(titulo, texto) {
+    $('cargando-titulo').textContent = titulo;
+    $('cargando-texto').textContent = texto || '';
+    mostrar('p-cargando');
+  }
+
+  /** Llama a una función del servidor (google.script.run) y devuelve una promesa con la respuesta { ok, ... }. */
+  function servidor(fn, arg1, arg2) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    return new Promise(function (resolve, reject) {
+      if (!window.google || !google.script || !google.script.run) { reject(new Error('sin-servidor')); return; }
+      var r = google.script.run
+        .withSuccessHandler(function (x) { resolve(x); })
+        .withFailureHandler(function (e) { reject(e || new Error('fallo')); });
+      r[fn].apply(r, args);
+    }).then(function (resp) {
+      if (!resp || resp.ok === false) throw { amable: true, mensaje: (resp && resp.error) || 'No pudimos completar la acción. Intenta de nuevo.' };
+      return resp;
+    });
+  }
+
+  function mensajeDeError(e) {
+    if (e && e.amable) return e.mensaje;
+    return 'No pudimos conectarnos. Revisa tu internet e intenta de nuevo. Si sigue igual, avisa a tu supervisor.';
+  }
+
+  // ---------------------------------------------------------------- pantalla 1
+  function cargarNombres() {
+    servidor('api_listarContratistas').then(function (r) {
+      var sel = $('nombre');
+      sel.innerHTML = '';
+      var o = document.createElement('option'); o.value = ''; o.textContent = 'Escoge tu nombre…'; sel.appendChild(o);
+      r.nombres.forEach(function (n) { var op = document.createElement('option'); op.value = n; op.textContent = tituloNombre(n); sel.appendChild(op); });
+    }).catch(function (e) {
+      $('nombre').innerHTML = '<option value="">No se pudo cargar la lista</option>';
+      banner(mensajeDeError(e));
+    });
+  }
+
+  function entrar() {
+    banner('');
+    var nombre = $('nombre').value, pin = $('pin').value.trim();
+    if (!nombre) { banner('Escoge tu nombre en la lista.'); return; }
+    if (!/^\d{4}$/.test(pin)) { banner('Escribe tu PIN: son 4 números (los últimos 4 de tu cédula).'); return; }
+    $('btn-entrar').disabled = true;
+    servidor('api_login', nombre, pin).then(function (r) {
+      S.nombre = nombre; S.pin = pin; S.contrato = r.contrato;
+      pintarDatos();
+      mostrar('p-datos');
+    }).catch(function (e) { banner(mensajeDeError(e)); })
+      .then(function () { $('btn-entrar').disabled = false; });
+  }
+
+  // ---------------------------------------------------------------- pantalla 2
+  function mesActual() { return S.contrato.meses.filter(function (m) { return m.key === S.mes; })[0]; }
+
+  function pintarDatos() {
+    var c = S.contrato;
+    $('saludo').textContent = 'Hola, ' + tituloNombre(c.nombre.split(' ').slice(0, 2).join(' '));
+    $('d-contrato').textContent = c.numeroContrato || '—';
+    $('d-honorario').textContent = fmtMoney(c.honorario);
+    var sel = $('mes');
+    sel.innerHTML = '';
+    c.meses.forEach(function (m) {
+      var o = document.createElement('option');
+      o.value = m.key;
+      o.textContent = m.label + (m.enviado ? '  (ya enviada ' + m.enviado.split(' ')[0] + ')' : '');
+      sel.appendChild(o);
+    });
+    S.mes = c.mesDefault;
+    sel.value = S.mes;
+    S.adicionales = [];
+    $('dias-bloque').hidden = !c.v3;
+    pintarPeriodo();
+  }
+
+  function pintarPeriodo() {
+    var m = mesActual();
+    S.fechasEditables = false;
+    $('periodo-lectura').hidden = false;
+    $('periodo-edicion').hidden = true;
+    $('d-inicio').textContent = fmtFecha(m.inicio);
+    $('d-corte').textContent = fmtFecha(m.corte);
+    $('d-valor').textContent = m.dias + ' días · ' + fmtMoney(m.valor);
+    $('f-inicio').value = m.inicio; $('f-corte').value = m.corte;
+    $('ya-enviado').hidden = !m.enviado;
+    quitarDias();
+  }
+
+  // ---- días distintos (novedad): valor = honorario × días ÷ 30
+  function mostrarDias() {
+    S.diasActivo = true;
+    $('btn-dias').hidden = true;
+    $('dias-edicion').hidden = false;
+    pintarCalculoDias();
+    $('dias-n').focus();
+  }
+  function quitarDias() {
+    S.diasActivo = false;
+    $('btn-dias').hidden = false;
+    $('dias-edicion').hidden = true;
+    $('dias-n').value = ''; $('dias-motivo').value = '';
+    $('dias-calculo').textContent = '';
+  }
+  function diasManualActual() {
+    if (!S.diasActivo) return null;
+    return { dias: $('dias-n').value.trim(), motivo: $('dias-motivo').value.trim() };
+  }
+  function pintarCalculoDias() {
+    var n = Number($('dias-n').value);
+    $('dias-calculo').textContent = (n >= 1 && n <= 30 && Math.floor(n) === n)
+      ? 'Se cobrarán ' + n + ' días: ' + fmtMoney(Math.round(S.contrato.honorario * n / 30)) + ' (honorario × ' + n + ' ÷ 30).' : '';
+  }
+  /** Revisa lo que escribió en "días distintos" antes de seguir; devuelve un mensaje si falta algo. */
+  function problemaDias() {
+    var d = diasManualActual();
+    if (!d) return '';
+    var n = Number(d.dias);
+    if (d.dias === '' || !isFinite(n) || Math.floor(n) !== n || n < 1 || n > 30) return 'Escribe los días a cobrar: un número entero entre 1 y 30. O toca «Volver a los días normales».';
+    if (!d.motivo) return 'Escribe el motivo de los días distintos (suspensión, licencia, novedad…).';
+    return '';
+  }
+
+  /** Lo que se manda al servidor además de la planilla principal: planillas adicionales y días a mano. */
+  function extrasPayload() {
+    return {
+      adicionales: S.adicionales.map(function (a) { return { numero: a.numero, periodo: a.periodo, valor: a.valor, tempId: a.tempId || '' }; }),
+      diasManual: diasManualActual()
+    };
+  }
+
+  function fechasActuales() {
+    var m = mesActual();
+    if (S.fechasEditables) return { inicio: $('f-inicio').value || m.inicio, corte: $('f-corte').value || m.corte };
+    return { inicio: m.inicio, corte: m.corte };
+  }
+
+  function cambiarFechas() {
+    S.fechasEditables = true;
+    $('periodo-lectura').hidden = true;
+    $('periodo-edicion').hidden = false;
+  }
+
+  // ---------------------------------------------------------------- texto del PDF (pdf.js, sin OCR)
+  var PDFJS_WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  // BEGIN-PDFJS (test_pdfjs.js ejecuta este bloque tal cual para probar con los PDF reales)
+  var PDF_MAX_PAGINAS = 10, PDF_TIMEOUT_MS = 15000;
+
+  /** Une los items de texto de una página: espacio entre items; salto de línea con hasEOL o si cambia la coordenada Y. */
+  function unirItemsPdf(items) {
+    var out = '', lastY = null, eol = false;
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      if (!it || typeof it.str !== 'string') continue;
+      if (!it.str.trim()) { if (it.hasEOL) eol = true; continue; }
+      var y = it.transform ? it.transform[5] : null;
+      var alto = Math.abs(it.height || (it.transform && it.transform[3]) || 8);
+      var cambioY = lastY !== null && y !== null && Math.abs(y - lastY) > Math.max(2, alto * 0.4);
+      if (out) out += (eol || cambioY) ? '\n' : ' ';
+      out += it.str.trim();
+      if (y !== null) lastY = y;
+      eol = !!it.hasEOL;
+    }
+    return out;
+  }
+
+  /** ArrayBuffer del PDF -> texto (hasta 10 páginas, separadas por línea en blanco). Nunca falla: si algo sale mal o pasan 15 s, devuelve ''. */
+  function extraerTextoPdf(arrayBuffer) {
+    return new Promise(function (resolve) {
+      var terminado = false, doc = null, timer = null;
+      function fin(texto) {
+        if (terminado) return;
+        terminado = true;
+        clearTimeout(timer);
+        try { if (doc && doc.destroy) doc.destroy(); } catch (e0) { /* nada */ }
+        resolve(typeof texto === 'string' ? texto : '');
+      }
+      timer = setTimeout(function () { fin(''); }, PDF_TIMEOUT_MS);
+      try {
+        if (typeof pdfjsLib === 'undefined' || !pdfjsLib || !pdfjsLib.getDocument) { fin(''); return; }
+        var tarea = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer.slice(0)), isEvalSupported: false, disableFontFace: true });
+        tarea.promise.then(function (d) {
+          doc = d;
+          var total = Math.min(d.numPages, PDF_MAX_PAGINAS), paginas = [];
+          function pagina(n) {
+            if (terminado) return;
+            if (n > total) { fin(paginas.join('\n\n')); return; }
+            d.getPage(n).then(function (pg) {
+              return pg.getTextContent().then(function (tc) {
+                paginas.push(unirItemsPdf(tc.items));
+                try { pg.cleanup(); } catch (e1) { /* nada */ }
+                pagina(n + 1);
+              });
+            }).catch(function () { fin(''); });
+          }
+          pagina(1);
+        }).catch(function () { fin(''); });
+      } catch (e) { fin(''); }
+    });
+  }
+  // END-PDFJS
+
+  /** Espera (hasta 5 s) a que carguen los dos scripts de cdnjs; true si pdf.js quedó listo. Si cdnjs falló, responde al instante false. */
+  function esperarPdfJs() {
+    return new Promise(function (resolve) {
+      var t0 = Date.now();
+      (function revisar() {
+        var lib = window.pdfjsLib, conLib = !!(lib && lib.getDocument);
+        var vencido = Date.now() - t0 > 5000;
+        if (window.pdfjsFalla || (vencido && !conLib)) { resolve(false); return; }
+        if (conLib && (window.pdfjsWorker || vencido)) {
+          try { if (lib.GlobalWorkerOptions) lib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL; } catch (e) { /* nada */ }
+          resolve(true); return;
+        }
+        setTimeout(revisar, 100);
+      })();
+    });
+  }
+
+  function leerBuffer(file) {
+    return new Promise(function (resolve, reject) {
+      var fr = new FileReader();
+      fr.onload = function () { resolve(fr.result); };
+      fr.onerror = function () { reject(new Error('lectura')); };
+      fr.readAsArrayBuffer(file);
+    });
+  }
+
+  /** Texto real del PDF; '' si pdf.js no cargó, el PDF es una imagen escaneada o algo falla (el servidor usará OCR). */
+  function textoDelPdf(file) {
+    return esperarPdfJs().then(function (listo) {
+      if (!listo) return '';
+      return leerBuffer(file).then(extraerTextoPdf);
+    }).catch(function () { return ''; });
+  }
+
+  // ---------------------------------------------------------------- subir archivo
+  function leerBase64(file) {
+    return new Promise(function (resolve, reject) {
+      var fr = new FileReader();
+      fr.onload = function () { resolve({ nombre: file.name, base64: String(fr.result).split(',')[1] || '' }); };
+      fr.onerror = function () { reject(new Error('lectura')); };
+      fr.readAsDataURL(file);
+    });
+  }
+
+  /** Las fotos del celular pesan mucho: se reducen antes de enviarlas (se ven igual de claras para leer). */
+  function comprimirImagen(file) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file), img = new Image();
+      img.onload = function () {
+        URL.revokeObjectURL(url);
+        var max = 2000, w = img.naturalWidth, h = img.naturalHeight, esc = Math.min(1, max / Math.max(w, h));
+        var cv = document.createElement('canvas');
+        cv.width = Math.round(w * esc); cv.height = Math.round(h * esc);
+        var g = cv.getContext('2d');
+        g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height);
+        g.drawImage(img, 0, 0, cv.width, cv.height);
+        var q = 0.85, d = cv.toDataURL('image/jpeg', q);
+        while (d.length > 2400000 && q > 0.45) { q -= 0.1; d = cv.toDataURL('image/jpeg', q); }
+        resolve({ nombre: (file.name || 'foto').replace(/\.[^.]+$/, '') + '.jpg', base64: d.split(',')[1] });
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('imagen')); };
+      img.src = url;
+    });
+  }
+
+  /** Revisa tipo y peso del archivo; devuelve un mensaje si no sirve. */
+  function problemaArchivo(file) {
+    var esPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+    var esImg = /^image\//.test(file.type) || /\.(jpe?g|png|heic|heif)$/i.test(file.name);
+    if (!esPdf && !esImg) return 'Solo puedes subir un PDF o una foto (JPG o PNG).';
+    if (file.size > MAX_BYTES) return 'El archivo pesa más de 10 MB. Sube un PDF más liviano o una foto.';
+    return '';
+  }
+
+  /** PDF: base64 + texto real (pdf.js). Foto: base64 reducido. */
+  function prepararArchivo(file) {
+    var esPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+    return esPdf
+      ? Promise.all([leerBase64(file), textoDelPdf(file)]).then(function (r) { r[0].texto = r[1] || ''; return r[0]; })
+      : comprimirImagen(file);
+  }
+
+  function alElegirArchivo(ev) {
+    var input = ev.target, file = input.files && input.files[0];
+    input.value = '';
+    if (!file) return;
+    banner('');
+    var pa = problemaArchivo(file);
+    if (pa) { banner(pa); return; }
+    if (S.fechasEditables) {
+      var f = fechasActuales();
+      if (!f.inicio || !f.corte) { banner('Escribe las dos fechas del periodo o vuelve a las fechas normales.'); return; }
+    }
+    var pd = problemaDias();
+    if (pd) { banner(pd); return; }
+    cargando('Leyendo tu planilla…', 'Esto puede tardar hasta 30 segundos. No cierres esta pantalla.');
+    prepararArchivo(file).then(function (a) {
+      if (!a.base64) throw { amable: true, mensaje: 'No pudimos abrir el archivo. Intenta con otro.' };
+      var f = fechasActuales(), x = extrasPayload();
+      return servidor('api_leerPlanilla', {
+        nombre: S.nombre, pin: S.pin, mes: S.mes, fechaInicio: f.inicio, fechaCorte: f.corte,
+        archivo: { nombre: a.nombre, base64: a.base64 },
+        texto: a.texto || '', adicionales: x.adicionales, diasManual: x.diasManual
+      });
+    }).then(function (r) {
+      S.tempId = r.tempId; S.leyo = !!r.leyo; S.evaluacion = r.evaluacion || null; S.sucio = false;
+      var l = r.lectura || {};
+      S.datos = { numero: l.numero || '', periodo: l.periodo || '', salud: l.salud, pension: l.pension, arl: l.arl };
+      S.edicion = !S.leyo || faltaAlgo();
+      S.notaLectura = r.leyo ? '' : 'No pudimos leer tu planilla con seguridad. Escribe estos datos como aparecen en tu planilla.';
+      pintarVerificar();
+      mostrar('p-verificar');
+    }).catch(function (e) {
+      mostrar('p-datos');
+      banner(e && e.message === 'imagen' ? 'No pudimos abrir la foto. Intenta con otra o sube el PDF.' : mensajeDeError(e));
+    });
+  }
+
+  // ---------------------------------------------------------------- planillas adicionales (corrección, ajuste, otra planilla)
+  function llenarSelectoresAdic() {
+    var selM = $('a-mes'), selA = $('a-anio');
+    if (selM.options.length) return;
+    var o0 = document.createElement('option'); o0.value = ''; o0.textContent = 'Mes…'; selM.appendChild(o0);
+    MESES.forEach(function (n, i) { var o = document.createElement('option'); o.value = pad2(i + 1); o.textContent = n; selM.appendChild(o); });
+    var y = Number(S.mes.slice(0, 4)) || new Date().getFullYear();
+    var o1 = document.createElement('option'); o1.value = ''; o1.textContent = 'Año…'; selA.appendChild(o1);
+    for (var a = y - 1; a <= y + 1; a++) { var oa = document.createElement('option'); oa.value = String(a); oa.textContent = String(a); selA.appendChild(oa); }
+  }
+
+  function pintarAdicionales() {
+    var v3 = !!(S.contrato && S.contrato.v3);
+    $('adic-card').hidden = !v3;
+    if (!v3) return;
+    var ul = $('adic-lista');
+    ul.innerHTML = '';
+    S.adicionales.forEach(function (a, i) {
+      var li = document.createElement('li');
+      var t = document.createElement('span');
+      t.textContent = 'Planilla ' + (i + 2) + ' · n.º ' + a.numero + ' · ' + labelMes(a.periodo) + ' · ' + fmtMoney(a.valor) + (a.tempId ? ' · con PDF' : '');
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'quitar'; b.textContent = 'Quitar';
+      b.setAttribute('aria-label', 'Quitar la planilla ' + (i + 2));
+      b.addEventListener('click', function () { quitarAdicional(i); });
+      li.appendChild(t); li.appendChild(b); ul.appendChild(li);
+    });
+    ul.hidden = !S.adicionales.length;
+    $('btn-adic-abrir').hidden = S.adicionales.length >= 3 || !$('adic-form').hidden;
+  }
+
+  function abrirAdicional() {
+    llenarSelectoresAdic();
+    $('a-numero').value = ''; $('a-mes').value = ''; $('a-anio').value = ''; $('a-valor').value = '';
+    S.adicTemp = '';
+    $('adic-estado').hidden = true; $('adic-error').hidden = true;
+    ['ca-numero', 'ca-periodo', 'ca-valor'].forEach(function (id) { $(id).classList.remove('falta'); });
+    $('adic-titulo').textContent = 'Planilla ' + (S.adicionales.length + 2);
+    $('adic-form').hidden = false;
+    $('btn-adic-abrir').hidden = true;
+    $('a-numero').focus();
+  }
+
+  function cerrarAdicional() {
+    $('adic-form').hidden = true;
+    S.adicTemp = '';
+    pintarAdicionales();
+  }
+
+  function errorAdicional(msg) { var b = $('adic-error'); b.textContent = msg; b.hidden = !msg; }
+
+  function alElegirArchivoAdic(ev) {
+    var input = ev.target, file = input.files && input.files[0];
+    input.value = '';
+    if (!file) return;
+    errorAdicional('');
+    var pa = problemaArchivo(file);
+    if (pa) { errorAdicional(pa); return; }
+    var est = $('adic-estado');
+    est.textContent = 'Leyendo la planilla… puede tardar hasta 30 segundos.'; est.hidden = false;
+    $('btn-adic-agregar').disabled = true;
+    prepararArchivo(file).then(function (a) {
+      if (!a.base64) throw { amable: true, mensaje: 'No pudimos abrir el archivo. Intenta con otro.' };
+      var f = fechasActuales();
+      return servidor('api_leerPlanilla', {
+        nombre: S.nombre, pin: S.pin, mes: S.mes, fechaInicio: f.inicio, fechaCorte: f.corte, adicional: true,
+        archivo: { nombre: a.nombre, base64: a.base64 }, texto: a.texto || ''
+      });
+    }).then(function (r) {
+      S.adicTemp = r.tempId;
+      var l = r.lectura || {};
+      if (l.numero) $('a-numero').value = l.numero;
+      if (l.periodo) { $('a-mes').value = l.periodo.slice(5, 7); $('a-anio').value = l.periodo.slice(0, 4); }
+      if (r.valor !== null && r.valor !== undefined) $('a-valor').value = dinero(r.valor);
+      est.textContent = r.leyo
+        ? 'Archivo guardado. Revisa que el n.º, el mes y el valor sean los de esa planilla.'
+        : 'Archivo guardado, pero no pudimos leerlo con seguridad. Escribe el n.º, el mes y el valor como aparecen en esa planilla.';
+    }).catch(function (e) {
+      est.hidden = true;
+      errorAdicional(e && e.message === 'imagen' ? 'No pudimos abrir la foto. Intenta con otra o escribe los datos a mano.' : mensajeDeError(e));
+    }).then(function () { $('btn-adic-agregar').disabled = false; });
+  }
+
+  function agregarAdicional() {
+    errorAdicional('');
+    var numero = $('a-numero').value.replace(/\s/g, ''), m = $('a-mes').value, y = $('a-anio').value, valor = soloNumero($('a-valor').value);
+    $('ca-numero').classList.toggle('falta', !numero || !/^\d+$/.test(numero));
+    $('ca-periodo').classList.toggle('falta', !(m && y));
+    $('ca-valor').classList.toggle('falta', !(valor > 0));
+    if (!numero || !/^\d+$/.test(numero)) { errorAdicional('Escribe el n.º de la planilla, solo con números.'); return; }
+    if (!(m && y)) { errorAdicional('Escoge el mes cotizado de esa planilla.'); return; }
+    if (!(valor > 0)) { errorAdicional('Escribe el valor pagado: un número mayor que cero (sin signo menos y sin intereses de mora).'); return; }
+    if (S.adicionales.length >= 3) { errorAdicional('Ya agregaste 3 planillas adicionales, que es el máximo.'); return; }
+    S.adicionales.push({ numero: numero, periodo: y + '-' + m, valor: valor, tempId: S.adicTemp || '' });
+    cerrarAdicional();
+    evaluarAhora().catch(function (e) { banner(mensajeDeError(e)); });
+  }
+
+  function quitarAdicional(i) {
+    S.adicionales.splice(i, 1);
+    pintarAdicionales();
+    evaluarAhora().catch(function (e) { banner(mensajeDeError(e)); });
+  }
+
+  // ---------------------------------------------------------------- pantalla verificación
+  function faltaAlgo() {
+    var d = S.datos;
+    return !d.numero || !d.periodo || d.salud === null || d.pension === null || d.arl === null ||
+      d.salud === undefined || d.pension === undefined || d.arl === undefined;
+  }
+
+  function llenarSelectoresPeriodo() {
+    var selM = $('i-mes'), selA = $('i-anio');
+    if (!selM.options.length) {
+      var o0 = document.createElement('option'); o0.value = ''; o0.textContent = 'Mes…'; selM.appendChild(o0);
+      MESES.forEach(function (n, i) { var o = document.createElement('option'); o.value = pad2(i + 1); o.textContent = n; selM.appendChild(o); });
+      var y = Number(S.mes.slice(0, 4)) || new Date().getFullYear();
+      var o1 = document.createElement('option'); o1.value = ''; o1.textContent = 'Año…'; selA.appendChild(o1);
+      for (var a = y - 1; a <= y + 1; a++) { var oa = document.createElement('option'); oa.value = String(a); oa.textContent = String(a); selA.appendChild(oa); }
+    }
+  }
+
+  function pintarVerificar() {
+    var d = S.datos;
+    $('ver-nota').hidden = !S.notaLectura;
+    $('ver-nota').textContent = S.notaLectura || '';
+    $('v-numero').textContent = d.numero || '—';
+    $('v-periodo').textContent = d.periodo ? labelMes(d.periodo) : '—';
+    $('v-salud').textContent = d.salud === null || d.salud === undefined ? '—' : fmtMoney(d.salud);
+    $('v-pension').textContent = d.pension === null || d.pension === undefined ? '—' : fmtMoney(d.pension);
+    $('v-arl').textContent = d.arl === null || d.arl === undefined ? '—' : fmtMoney(d.arl);
+
+    llenarSelectoresPeriodo();
+    $('i-numero').value = d.numero || '';
+    $('i-mes').value = d.periodo ? d.periodo.slice(5, 7) : '';
+    $('i-anio').value = d.periodo ? d.periodo.slice(0, 4) : '';
+    $('i-salud').value = dinero(d.salud); $('i-pension').value = dinero(d.pension); $('i-arl').value = dinero(d.arl);
+    marcarFaltantes();
+
+    $('lectura-vista').hidden = S.edicion;
+    $('lectura-edicion').hidden = !S.edicion;
+    $('btn-corregir').hidden = S.edicion;
+    $('btn-revisar').hidden = !S.edicion;
+    $('ayuda-donde').open = !S.leyo;
+    pintarAdicionales();
+    pintarSemaforo();
+  }
+
+  function marcarFaltantes() {
+    var d = datosDeInputs();
+    $('c-numero').classList.toggle('falta', !d.numero);
+    $('c-periodo').classList.toggle('falta', !d.periodo);
+    $('c-salud').classList.toggle('falta', d.salud === null);
+    $('c-pension').classList.toggle('falta', d.pension === null);
+    $('c-arl').classList.toggle('falta', d.arl === null);
+  }
+
+  function datosDeInputs() {
+    var m = $('i-mes').value, a = $('i-anio').value;
+    return {
+      numero: $('i-numero').value.replace(/\s/g, ''),
+      periodo: m && a ? a + '-' + m : '',
+      salud: soloNumero($('i-salud').value), pension: soloNumero($('i-pension').value), arl: soloNumero($('i-arl').value)
+    };
+  }
+
+  function alEditar() {
+    S.datos = datosDeInputs();
+    S.sucio = true;
+    marcarFaltantes();
+    pintarSemaforo();
+  }
+
+  function pintarSemaforo() {
+    var box = $('semaforo'), ev = S.evaluacion, cls = 'gris', emoji = '📝', titulo = '', msg = '';
+    if (S.edicion && S.sucio) {
+      titulo = 'Cambiaste algún dato'; msg = 'Toca «Revisar de nuevo» para ver si ahora está bien.';
+    } else if (!ev) {
+      titulo = 'Falta revisar'; msg = 'Escribe los datos de tu planilla y toca «Revisar de nuevo».';
+    } else {
+      cls = ev.estado === 'OK' ? 'ok' : (ev.estado === 'REVISAR' ? 'rev' : 'err');
+      emoji = ev.emoji;
+      if (ev.bloquea) titulo = 'Falta algo para generar tu cuenta de cobro';
+      else if (ev.estado === 'OK') titulo = 'Todo en orden';
+      else if (ev.estado === 'REVISAR') titulo = 'Tu supervisor lo revisará';
+      else titulo = 'Alerta para tu supervisor (tu cuenta de cobro se genera igual)';
+      msg = ev.mensaje;
+    }
+    box.className = 'semaforo ' + cls;
+    box.innerHTML = '';
+    var e = document.createElement('span'); e.className = 'emoji'; e.textContent = emoji; e.setAttribute('aria-hidden', 'true');
+    var t = document.createElement('div'); t.className = 'titulo'; t.textContent = titulo;
+    var m = document.createElement('div'); m.className = 'msg'; m.textContent = msg;
+    box.appendChild(e); box.appendChild(t); box.appendChild(m);
+
+    // Las alertas (🟡 / 🔴) NO bloquean: solo falta de datos obligatorios o formato imposible (ev.bloquea)
+    var btn = $('btn-enviar');
+    btn.disabled = !ev || ev.bloquea === true || (S.edicion && S.sucio);
+    btn.textContent = 'Enviar y generar mi cuenta de cobro';
+  }
+
+  function corregir() {
+    S.edicion = true; S.sucio = false;
+    pintarVerificar();
+    $('i-numero').focus();
+  }
+
+  /** Pide al servidor revisar los datos actuales (planilla principal + adicionales + días a mano) sin guardar nada. */
+  function evaluarAhora() {
+    S.datos = S.edicion ? datosDeInputs() : S.datos;
+    var f = fechasActuales(), x = extrasPayload();
+    return servidor('api_evaluar', { nombre: S.nombre, pin: S.pin, mes: S.mes, fechaInicio: f.inicio, fechaCorte: f.corte, datos: S.datos,
+      adicionales: x.adicionales, diasManual: x.diasManual })
+      .then(function (r) { S.evaluacion = r.evaluacion; S.sucio = false; pintarVerificar(); });
+  }
+
+  function revisarDeNuevo() {
+    banner('');
+    $('btn-revisar').disabled = true;
+    evaluarAhora()
+      .catch(function (e) { banner(mensajeDeError(e)); })
+      .then(function () { $('btn-revisar').disabled = false; });
+  }
+
+  function enviar() {
+    if (S.ocupado) return;
+    banner('');
+    S.ocupado = true;
+    var f = fechasActuales();
+    cargando('Generando tu cuenta de cobro…', 'Estamos guardando tu planilla y armando la cuenta de cobro en Excel y PDF. Puede tardar hasta un minuto.');
+    var x = extrasPayload();
+    servidor('api_enviar', { nombre: S.nombre, pin: S.pin, mes: S.mes, fechaInicio: f.inicio, fechaCorte: f.corte, datos: S.datos, tempId: S.tempId,
+      adicionales: x.adicionales, diasManual: x.diasManual })
+      .then(function (r) { pintarFinal(r); mostrar('p-final'); })
+      .catch(function (e) { mostrar('p-verificar'); banner(mensajeDeError(e)); })
+      .then(function () { S.ocupado = false; });
+  }
+
+  // ---------------------------------------------------------------- pantalla final
+  function pintarFinal(r) {
+    S.facturaXlsx = r.facturaXlsx || null; S.facturaPdf = r.facturaPdf || null;
+    var hay = !!(S.facturaXlsx || S.facturaPdf);
+    var box = $('semaforo-final');
+    var cls = r.estado === 'OK' ? 'ok' : (r.estado === 'REVISAR' ? 'rev' : 'err');
+    box.className = 'semaforo ' + cls;
+    box.innerHTML = '';
+    var e = document.createElement('span'); e.className = 'emoji'; e.textContent = r.emoji; e.setAttribute('aria-hidden', 'true');
+    var t = document.createElement('div'); t.className = 'titulo';
+    t.textContent = !hay ? 'Enviado, pero falta la cuenta de cobro' :
+      (r.estado === 'OK' ? '¡Listo! Todo en orden' : (r.estado === 'REVISAR' ? 'Cuenta de cobro lista, tu supervisor la revisará' : 'Cuenta de cobro lista, con una alerta para tu supervisor'));
+    var m = document.createElement('div'); m.className = 'msg'; m.textContent = r.mensaje;
+    box.appendChild(e); box.appendChild(t); box.appendChild(m);
+
+    $('final-aviso').hidden = !r.aviso;
+    $('final-aviso').textContent = r.aviso || '';
+    $('final-descarga').hidden = !hay;
+    $('btn-descargar').hidden = !S.facturaXlsx;
+    $('btn-descargar-pdf').hidden = !S.facturaPdf;
+    $('final-nota-pdf').hidden = !(S.facturaXlsx && S.facturaPdf);
+    $('final-error').hidden = hay;
+    $('final-correo').hidden = !r.correoContratista;
+    $('btn-abrir').hidden = true;
+  }
+
+  function blobFactura(f) {
+    var bin = atob(f.base64), arr = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return new Blob([arr], { type: f.mime || 'application/octet-stream' });
+  }
+
+  /** Descarga el Excel (principal) o el PDF (copia de lectura) que devolvió el servidor. */
+  function descargar(cual) {
+    var f = cual === 'pdf' ? S.facturaPdf : S.facturaXlsx;
+    if (!f) return;
+    try {
+      var url = URL.createObjectURL(blobFactura(f));
+      var a = document.createElement('a');
+      a.href = url; a.download = f.nombre;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      var ab = $('btn-abrir'); ab.href = url; ab.hidden = false;   // por si el celular no descarga: se abre en otra pestaña
+    } catch (e) {
+      banner('No pudimos descargar el archivo en este celular. Intenta desde otro navegador o pide el archivo a tu supervisor.');
+    }
+  }
+
+  function reiniciarMes() {
+    S.tempId = ''; S.facturaXlsx = null; S.facturaPdf = null; S.evaluacion = null; S.sucio = false; S.edicion = false; S.adicionales = []; S.adicTemp = '';
+    // se vuelve a entrar para refrescar el estado de los meses
+    servidor('api_login', S.nombre, S.pin).then(function (r) { S.contrato = r.contrato; pintarDatos(); mostrar('p-datos'); })
+      .catch(function (e) { banner(mensajeDeError(e)); mostrar('p-login'); });
+  }
+
+  function salir() {
+    S.nombre = ''; S.pin = ''; S.contrato = null; S.tempId = ''; S.facturaXlsx = null; S.facturaPdf = null; S.adicionales = []; S.adicTemp = '';
+    $('pin').value = ''; $('nombre').value = '';
+    banner('');
+    mostrar('p-login');
+  }
+
+  // ---------------------------------------------------------------- eventos
+  $('btn-entrar').addEventListener('click', entrar);
+  $('pin').addEventListener('keydown', function (e) { if (e.key === 'Enter') entrar(); });
+  $('pin').addEventListener('input', function () { this.value = this.value.replace(/\D/g, '').slice(0, 4); });
+  $('ver-pin').addEventListener('click', function () {
+    var p = $('pin'), ver = p.type === 'password';
+    p.type = ver ? 'text' : 'password'; this.textContent = ver ? 'Ocultar' : 'Ver';
+  });
+  $('mes').addEventListener('change', function () { S.mes = this.value; S.adicionales = []; banner(''); pintarPeriodo(); });
+  $('btn-dias').addEventListener('click', mostrarDias);
+  $('btn-dias-quitar').addEventListener('click', quitarDias);
+  $('dias-n').addEventListener('input', function () { this.value = this.value.replace(/\D/g, '').slice(0, 2); pintarCalculoDias(); });
+  $('btn-adic-abrir').addEventListener('click', abrirAdicional);
+  $('btn-adic-cancelar').addEventListener('click', cerrarAdicional);
+  $('btn-adic-agregar').addEventListener('click', agregarAdicional);
+  $('archivo-adic').addEventListener('change', alElegirArchivoAdic);
+  $('a-valor').addEventListener('blur', function () { var n = soloNumero(this.value); this.value = n === null ? this.value : dinero(n); });
+  $('btn-cambiar-fechas').addEventListener('click', cambiarFechas);
+  $('btn-restaurar-fechas').addEventListener('click', pintarPeriodo);
+  $('archivo').addEventListener('change', alElegirArchivo);
+  $('archivo-cam').addEventListener('change', alElegirArchivo);
+  ['i-numero', 'i-salud', 'i-pension', 'i-arl'].forEach(function (id) { $(id).addEventListener('input', alEditar); });
+  ['i-salud', 'i-pension', 'i-arl'].forEach(function (id) {
+    $(id).addEventListener('blur', function () { var n = soloNumero(this.value); this.value = n === null ? this.value : dinero(n); });
+  });
+  ['i-mes', 'i-anio'].forEach(function (id) { $(id).addEventListener('change', alEditar); });
+  $('btn-corregir').addEventListener('click', corregir);
+  $('btn-revisar').addEventListener('click', revisarDeNuevo);
+  $('btn-enviar').addEventListener('click', enviar);
+  $('btn-otra').addEventListener('click', function () { banner(''); mostrar('p-datos'); });
+  $('btn-descargar').addEventListener('click', function () { descargar('xlsx'); });
+  $('btn-descargar-pdf').addEventListener('click', function () { descargar('pdf'); });
+  $('btn-otro-mes').addEventListener('click', reiniciarMes);
+  $('btn-salir-1').addEventListener('click', salir);
+  $('btn-salir-2').addEventListener('click', salir);
+
+  cargarNombres();
+})();
+</script>
+</body>
+</html>

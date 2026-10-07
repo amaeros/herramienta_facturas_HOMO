@@ -133,6 +133,28 @@ export const cargas = pgTable(
   (t) => [unique('cargas_contrato_mes_uq').on(t.contratoId, t.mes)],
 );
 
+/**
+ * Bitácora de cambios al contrato: quién (contratista o admin), qué campo, y el valor antes y después ya legibles
+ * (fechas como DD/MM/AAAA). Se borra junto con el contrato.
+ */
+export const cambiosContrato = pgTable(
+  'cambios_contrato',
+  {
+    id: serial('id').primaryKey(),
+    contratoId: integer('contrato_id')
+      .notNull()
+      .references(() => contratos.id, { onDelete: 'cascade' }),
+    /** 'contratista' | 'admin' */
+    autor: text('autor').notNull(),
+    /** Nombre del campo del contrato en camelCase ('inicio', 'fin', 'revisoNombre', 'revisoCargo'...). */
+    campo: text('campo').notNull(),
+    antes: text('antes').notNull().default(''),
+    despues: text('despues').notNull().default(''),
+    creado: timestamp('creado', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('cambios_contrato_contrato_idx').on(t.contratoId), index('cambios_contrato_creado_idx').on(t.creado)],
+);
+
 /** Planillas subidas que todavía no se enviaron (caducan a las 6 h). */
 export const lecturas = pgTable(
   'lecturas',
@@ -166,3 +188,4 @@ export type Parametros = typeof parametros.$inferSelect;
 export type ContratoFila = typeof contratos.$inferSelect;
 export type CargaFila = typeof cargas.$inferSelect;
 export type LecturaFila = typeof lecturas.$inferSelect;
+export type CambioContratoFila = typeof cambiosContrato.$inferSelect;

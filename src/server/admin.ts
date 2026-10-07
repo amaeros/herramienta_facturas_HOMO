@@ -8,7 +8,8 @@ import { nombreLimpio } from './archivos';
 import type { BlobStore } from './blob';
 import type { Db } from './db';
 import { cargas, contratos, lecturas, parametros, type AdicionalGuardada, type ContratoFila, type Parametros } from './db/schema';
-import { monto, mesValido, normTxt } from './entrada';
+import { CAMPOS_AUDITADOS_ADMIN, diferencias, registrarCambios } from './cambios';
+import { MENSAJE_FECHA_CONTRATO, MENSAJE_FIN_ANTES_DE_INICIO, monto, mesValido, normTxt } from './entrada';
 import { ErrorAmable, ErrorValidacion } from './errores';
 import { MAX_BYTES_IMPORTAR, parsearExcelControl } from './importar';
 import { cargarParametros, mesActual, recalcularAcumulados, type Deps } from './servicios';
@@ -133,14 +134,14 @@ export function validarContrato(entrada: Record<string, unknown>, base: Contrato
     const v = get(k);
     if (vacio(v)) return null;
     if (!parseYMD(String(v).trim())) {
-      err[k] = k === 'inicio' ? 'La fecha de inicio no es válida. Usa el formato AAAA-MM-DD.' : 'La fecha de fin no es válida. Usa el formato AAAA-MM-DD.';
+      err[k] = MENSAJE_FECHA_CONTRATO[k];
       return null;
     }
     return String(v).trim();
   };
   const inicio = fecha('inicio');
   const fin = fecha('fin');
-  if (inicio && fin && fin < inicio && !err.fin) err.fin = 'La fecha de fin no puede ser antes de la fecha de inicio.';
+  if (inicio && fin && fin < inicio && !err.fin) err.fin = MENSAJE_FIN_ANTES_DE_INICIO;
 
   // dinero
   const dinero = (k: 'honorario' | 'valorTotal', etiqueta: string): number | null => {
@@ -242,6 +243,8 @@ export async function actualizarContrato(deps: Deps, id: number, entrada: Record
   const otros = (await deps.db.select().from(contratos)).filter((c) => c.id !== id);
   const v = validarContrato(entrada, actual, otros);
   const [c] = await deps.db.update(contratos).set(v).where(eq(contratos.id, id)).returning();
+  // bitácora: solo los campos que de verdad cambiaron
+  await registrarCambios(deps, id, 'admin', diferencias(actual, c, CAMPOS_AUDITADOS_ADMIN));
   // el valor total / fechas pueden haber cambiado: acumulado y % se recalculan (el valor de cada mes NO se re-evalúa)
   await recalcularAcumulados(deps.db, c);
   return { ...c, cargas: await contarCargas(deps.db, id) };

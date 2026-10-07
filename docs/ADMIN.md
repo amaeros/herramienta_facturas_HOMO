@@ -49,6 +49,19 @@ Validaciones (mensajes amables, en español, indicando el campo):
 | `PATCH /api/admin/cargas/[id]` | `{aprobado?: boolean, observacion?: string}` | `carga` |
 | `GET /api/admin/planilla/[cargaId]?n=0` | n = 0 principal, 1..3 adicionales | el archivo desde Blob privado (Content-Type correcto, `inline`) |
 
+## Bitácora de cambios al contrato
+
+La contratista puede editar 4 campos de su contrato desde el celular (`PUT /api/mi-contrato`: fechas de inicio y fin, "Revisó (nombre)" y "Revisó (cargo)"; ver `docs/ARQUITECTURA.md`). Cada cambio, y los que hace el supervisor al editar una trabajadora (`PUT /api/admin/contratos/[id]`), queda anotado en `cambios_contrato`.
+
+| Ruta | Entrada | Salida |
+|---|---|---|
+| `GET /api/admin/cambios?contratoId=<id>` | `contratoId` opcional (entero). Sin él: los de todas las trabajadoras. Mal escrito → 400 | `cambios: [{id, contratoId, nombre, autor, campo, etiqueta, antes, despues, creado}]`, del más nuevo al más viejo, **máximo 100** |
+
+- `autor` = `'contratista'` o `'admin'`; `creado` = fecha ISO (UTC); `antes`/`despues` ya vienen legibles (fechas `DD/MM/AAAA`, dinero `$7.174.000`, vacío = `(vacío)`).
+- `etiqueta` = nombre para mostrar: `inicio` → "Fecha de inicio", `fin` → "Fecha de fin", `revisoNombre` → "Revisó (nombre)", `revisoCargo` → "Revisó (cargo)"; el admin además anota `numeroContrato`, `objeto`, `honorario`, `valorTotal`, `riesgo`, `riesgoNuevo`, `riesgoDesde` y `activo` (nunca datos personales).
+- Solo se anota lo que realmente cambió. Si se borra la trabajadora, su bitácora se borra con ella.
+- Sin cookie de admin → 401.
+
 ## Parámetros
 
 `GET /api/admin/parametros` → la fila; `PUT /api/admin/parametros` → valida (porcentajes entre 0 y 1, SMMLV entero > 0, multiplicadores > 0, ARL I..V entre 0 y 0.2, correo supervisor vacío o válido, tolerancia ≥ 0) y guarda.

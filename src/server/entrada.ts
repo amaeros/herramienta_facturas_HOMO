@@ -87,6 +87,13 @@ export function extrasDePedido(p: { adicionales?: unknown; diasManual?: unknown 
   return { adicionales: limpiarAdicionales(p.adicionales), diasManual: limpiarDiasManual(p.diasManual) };
 }
 
+/** Mensajes de las fechas del contrato (los usan el panel de admin y "mi contrato" de la contratista). */
+export const MENSAJE_FECHA_CONTRATO = {
+  inicio: 'La fecha de inicio no es válida. Usa el formato AAAA-MM-DD.',
+  fin: 'La fecha de fin no es válida. Usa el formato AAAA-MM-DD.',
+} as const;
+export const MENSAJE_FIN_ANTES_DE_INICIO = 'La fecha de fin no puede ser antes de la fecha de inicio.';
+
 export function fechaValida(s: unknown): string {
   const t = texto(s).trim();
   return parseYMD(t) ? t : '';

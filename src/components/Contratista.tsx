@@ -8,8 +8,9 @@ import { DEBOUNCE_EVALUAR_MS } from "./constantes";
 import { tituloNombre } from "./formato";
 import type { HojaDatos } from "./Hoja";
 import { datosDeInputs, faltaAlgo, INPUTS_VACIOS, inputsDeLectura, type Inputs } from "./lectura";
-import PasoDatos, { type DiasEstado, type PeriodoEstado } from "./PasoDatos";
+import PasoDatos from "./PasoDatos";
 import PasoFinal from "./PasoFinal";
+import { diasManualDeMotivo, esError, MES_COMPLETO, periodoElegido, type EleccionPeriodo } from "./periodo";
 import PasoLogin from "./PasoLogin";
 import type { FormMiContrato } from "./miContrato";
 import PasoMiContrato from "./PasoMiContrato";
@@ -24,22 +25,7 @@ import type {
 /** "perfil" = "Antes de empezar" (primera vez); "contrato" = "Mis datos del contrato" (se abre desde el paso 2). */
 type Pantalla = "login" | "registro" | "perfil" | "datos" | "contrato" | "cargando" | "verificar" | "final";
 
-const DIAS_VACIOS: DiasEstado = { activo: false, n: "", motivo: "" };
 const NOTA_NO_LEYO = "No pudimos leer tu planilla con seguridad. Escribe estos datos como aparecen en tu planilla.";
-
-function periodoNormal(m: MesInfo): PeriodoEstado {
-  return { editable: false, inicio: m.inicio, corte: m.corte };
-}
-
-/** Revisa lo que escribió en "días distintos" antes de seguir; devuelve un mensaje si falta algo. */
-function problemaDias(d: DiasEstado): string {
-  if (!d.activo) return "";
-  const n = Number(d.n.trim());
-  if (d.n.trim() === "" || !isFinite(n) || Math.floor(n) !== n || n < 1 || n > 30)
-    return "Escribe los días a cobrar: un número entero entre 1 y 30. O toca «Volver a los días normales».";
-  if (!d.motivo.trim()) return "Escribe el motivo de los días distintos (suspensión, licencia, novedad…).";
-  return "";
-}
 
 export default function Contratista() {
   const [pantalla, setPantalla] = useState<Pantalla>("login");
@@ -48,8 +34,7 @@ export default function Contratista() {
 
   const [contrato, setContrato] = useState<Resumen | null>(null);
   const [mesKey, setMesKey] = useState("");
-  const [periodo, setPeriodo] = useState<PeriodoEstado>({ editable: false, inicio: "", corte: "" });
-  const [dias, setDias] = useState<DiasEstado>(DIAS_VACIOS);
+  const [eleccion, setEleccion] = useState<EleccionPeriodo>(MES_COMPLETO);
 
   const [tempId, setTempId] = useState("");
   const [leyo, setLeyo] = useState(false);
@@ -96,8 +81,7 @@ export default function Contratista() {
     ocupado.current = false;
     setContrato(null);
     setMesKey("");
-    setPeriodo({ editable: false, inicio: "", corte: "" });
-    setDias(DIAS_VACIOS);
+    setEleccion(MES_COMPLETO);
     setTempId("");
     setLeyo(false);
     setNota("");
@@ -143,8 +127,7 @@ export default function Contratista() {
   function empezarMes(c: Resumen, key: string) {
     const m = c.meses.find((x) => x.key === key) ?? c.meses[0];
     setMesKey(m ? m.key : "");
-    setPeriodo(m ? periodoNormal(m) : { editable: false, inicio: "", corte: "" });
-    setDias(DIAS_VACIOS);
+    setEleccion(MES_COMPLETO); // cambiar de mes siempre vuelve a "El mes completo"
     setAdicionales([]);
   }
 
@@ -206,13 +189,17 @@ export default function Contratista() {
     empezarMes(contrato, key);
   }
 
+  /** Lo que resulta de "¿Qué vas a cobrar?" (periodo, días y valor) o por qué no se puede todavía. */
+  const elegido = contrato && mes ? periodoElegido(mes, contrato, eleccion.opcion, eleccion.del, eleccion.al) : null;
+
   function fechasActuales(): { inicio: string; corte: string } {
-    if (periodo.editable && mes) return { inicio: periodo.inicio || mes.inicio, corte: periodo.corte || mes.corte };
+    if (elegido && !esError(elegido)) return { inicio: elegido.inicio, corte: elegido.corte };
     return { inicio: mes?.inicio ?? "", corte: mes?.corte ?? "" };
   }
 
+  /** La herramienta cuenta los días sola: lo único que viaja en `diasManual` es el motivo (con los días ya contados). */
   function diasManualActual(): DiasManualPayload | null {
-    return dias.activo ? { dias: dias.n.trim(), motivo: dias.motivo.trim() } : null;
+    return elegido ? diasManualDeMotivo(eleccion.opcion, elegido, eleccion.motivo) : null;
   }
 
   function adicionalesPayload(lista: Adicional[] = adicionales) {
@@ -239,12 +226,11 @@ export default function Contratista() {
     setAviso(null);
     const pa = problemaArchivo(file);
     if (pa) { avisar(pa); return; }
-    if (periodo.editable && (!periodo.inicio || !periodo.corte)) {
-      avisar("Escribe las dos fechas del periodo o vuelve a las fechas normales.");
+    if (elegido && esError(elegido)) {
+      // el error ya está junto al campo: se lleva a la persona hasta allí
+      document.getElementById(elegido.campo === "al" ? "f-al" : "f-del")?.focus();
       return;
     }
-    const pd = problemaDias(dias);
-    if (pd) { avisar(pd); return; }
     esperar("Leyendo tu planilla…", "Esto puede tardar hasta 30 segundos. No cierres esta pantalla.", 2);
     try {
       const r = await subirPlanilla(file, false);
@@ -397,25 +383,14 @@ export default function Contratista() {
   /** Lo que ya se sabe en el paso 2: mes, periodo y valor. */
   function hojaDelMes(): HojaDatos {
     if (!contrato || !mes) return {};
-    const f = fechasActuales();
-    let valor: number | null = mes.valor;
-    let nDias: number | null = mes.dias;
-    if (dias.activo) {
-      const n = Number(dias.n);
-      const bien = dias.n.trim() !== "" && Number.isInteger(n) && n >= 1 && n <= 30;
-      valor = bien ? Math.round((contrato.honorario * n) / 30) : null;
-      nDias = bien ? n : null;
-    } else if (periodo.editable) {
-      valor = null; // con fechas distintas, el valor lo calcula el servidor al leer la planilla
-      nDias = null;
-    }
+    const bien = elegido && !esError(elegido) ? elegido : null; // con fechas malas, la hoja deja el periodo en rayas
     return {
       docNum: mesKey.replace("-", ""),
       nombre: tituloNombre(contrato.nombre),
-      inicio: f.inicio,
-      corte: f.corte,
-      dias: nDias,
-      valor,
+      inicio: bien?.inicio,
+      corte: bien?.corte,
+      dias: bien ? bien.dias : null,
+      valor: bien ? bien.valor : null,
     };
   }
 
@@ -461,12 +436,11 @@ export default function Contratista() {
         <PasoDatos
           contrato={contrato}
           mes={mes}
-          periodo={periodo}
-          dias={dias}
+          eleccion={eleccion}
+          elegido={elegido ?? { error: "" }}
           hoja={hojaDelMes()}
           onMes={cambiarMes}
-          onPeriodo={setPeriodo}
-          onDias={setDias}
+          onEleccion={setEleccion}
           onArchivo={alElegirArchivo}
           onSalir={salir}
           onMiContrato={() => { setAviso(null); mostrar("contrato"); }}

@@ -4,41 +4,31 @@ import type { ChangeEvent } from "react";
 import { MAX_BYTES } from "./archivos";
 import { fmtFecha, fmtMoney, tituloNombre } from "./formato";
 import Hoja, { type HojaDatos } from "./Hoja";
+import {
+  eleccionSoloDias, esError, limitesDelMes, MES_COMPLETO, type EleccionPeriodo, type PeriodoElegido, type PeriodoInvalido,
+} from "./periodo";
 import type { MesInfo, Resumen } from "./tipos";
-
-export interface PeriodoEstado {
-  editable: boolean;
-  inicio: string;
-  corte: string;
-}
-
-export interface DiasEstado {
-  activo: boolean;
-  n: string;
-  motivo: string;
-}
 
 interface Props {
   contrato: Resumen;
   mes: MesInfo;
-  periodo: PeriodoEstado;
-  dias: DiasEstado;
+  eleccion: EleccionPeriodo;
+  /** lo que resulta de la elección (o por qué no se puede) */
+  elegido: PeriodoElegido | PeriodoInvalido;
   hoja: HojaDatos;
   onMes: (key: string) => void;
-  onPeriodo: (p: PeriodoEstado) => void;
-  onDias: (d: DiasEstado) => void;
+  onEleccion: (e: EleccionPeriodo) => void;
   onArchivo: (file: File) => void;
   onSalir: () => void;
   onMiContrato: () => void;
 }
 
-/** Paso 2: mes a cobrar, periodo, días a mano (opcional) y la planilla. La hoja muestra mes, periodo y valor. */
-export default function PasoDatos({ contrato: c, mes, periodo, dias, hoja, onMes, onPeriodo, onDias, onArchivo, onSalir, onMiContrato }: Props) {
-  const n = Number(dias.n);
-  const calculoDias =
-    n >= 1 && n <= 30 && Math.floor(n) === n
-      ? "Se cobrarán " + n + " días: " + fmtMoney(Math.round((c.honorario * n) / 30)) + " (honorario × " + n + " ÷ 30)."
-      : "";
+/** Paso 2: mes a cobrar, qué se cobra (mes completo o solo unos días) y la planilla. La hoja muestra mes, periodo y valor. */
+export default function PasoDatos({ contrato: c, mes, eleccion, elegido, hoja, onMes, onEleccion, onArchivo, onSalir, onMiContrato }: Props) {
+  const lim = limitesDelMes(mes.key, c);
+  // los campos arrancan con fechas válidas, así que cualquier error es de algo que la persona cambió: se muestra de una
+  const mostrarDel = esError(elegido) && elegido.campo === "del" ? elegido.error : "";
+  const mostrarAl = esError(elegido) && elegido.campo === "al" ? elegido.error : "";
 
   function alElegir(ev: ChangeEvent<HTMLInputElement>) {
     const input = ev.target;
@@ -72,72 +62,92 @@ export default function PasoDatos({ contrato: c, mes, periodo, dias, hoja, onMes
           <div className="aviso warn">Ya enviaste este mes. Si subes otra planilla, reemplazará tu envío anterior.</div>
         )}
 
-        {!periodo.editable ? (
-          <button type="button" className="link" onClick={() => onPeriodo({ editable: true, inicio: mes.inicio, corte: mes.corte })}>
-            ¿Tuviste una novedad? Cambiar fechas
-          </button>
-        ) : (
-          <div>
-            <div className="aviso info">Cambia las fechas solo si empezaste o terminaste a mitad de mes. Tu supervisor las revisará.</div>
+        <fieldset className="opciones">
+          <legend>¿Qué vas a cobrar?</legend>
+
+          <label className={"opcion" + (eleccion.opcion === "completo" ? " marcada" : "")}>
+            <input
+              type="radio"
+              name="que-cobras"
+              value="completo"
+              checked={eleccion.opcion === "completo"}
+              onChange={() => onEleccion(MES_COMPLETO)}
+            />
+            <span className="opcion-texto">
+              <span className="opcion-titulo">El mes completo</span>
+              <span className="opcion-detalle cifra">
+                Del {fmtFecha(mes.inicio)} al {fmtFecha(mes.corte)}, {mes.dias} {mes.dias === 1 ? "día" : "días"}
+              </span>
+            </span>
+          </label>
+
+          <label className={"opcion" + (eleccion.opcion === "dias" ? " marcada" : "")}>
+            <input
+              type="radio"
+              name="que-cobras"
+              value="dias"
+              checked={eleccion.opcion === "dias"}
+              onChange={() => onEleccion(eleccionSoloDias(mes))}
+            />
+            <span className="opcion-texto">
+              <span className="opcion-titulo">Solo unos días</span>
+              <span className="opcion-detalle">Por ejemplo, si tuviste una suspensión o una licencia.</span>
+            </span>
+          </label>
+        </fieldset>
+
+        {eleccion.opcion === "dias" && (
+          <div className="rango">
             <div className="dos">
               <div className="campo">
-                <label htmlFor="f-inicio">Desde</label>
-                <input id="f-inicio" type="date" value={periodo.inicio} onChange={(e) => onPeriodo({ ...periodo, inicio: e.target.value })} />
+                <label htmlFor="f-del">Del</label>
+                <input
+                  id="f-del"
+                  type="date"
+                  min={lim.min}
+                  max={lim.max}
+                  value={eleccion.del}
+                  aria-invalid={mostrarDel ? true : undefined}
+                  aria-describedby={mostrarDel ? "f-del-error" : undefined}
+                  onChange={(e) => onEleccion({ ...eleccion, del: e.target.value })}
+                />
               </div>
               <div className="campo">
-                <label htmlFor="f-corte">Hasta</label>
-                <input id="f-corte" type="date" value={periodo.corte} onChange={(e) => onPeriodo({ ...periodo, corte: e.target.value })} />
+                <label htmlFor="f-al">Al</label>
+                <input
+                  id="f-al"
+                  type="date"
+                  min={eleccion.del && eleccion.del > lim.min && eleccion.del <= lim.max ? eleccion.del : lim.min}
+                  max={lim.max}
+                  value={eleccion.al}
+                  aria-invalid={mostrarAl ? true : undefined}
+                  aria-describedby={mostrarAl ? "f-al-error" : undefined}
+                  onChange={(e) => onEleccion({ ...eleccion, al: e.target.value })}
+                />
               </div>
             </div>
-            <button type="button" className="link" onClick={() => onPeriodo({ editable: false, inicio: mes.inicio, corte: mes.corte })}>
-              Volver a las fechas normales
-            </button>
+            {mostrarDel && <p id="f-del-error" className="error-campo" role="alert">Del: {mostrarDel}</p>}
+            {mostrarAl && <p id="f-al-error" className="error-campo" role="alert">Al: {mostrarAl}</p>}
+
+            <p className="rango-cuenta cifra" aria-live="polite">
+              {!esError(elegido) ? elegido.dias + " " + (elegido.dias === 1 ? "día" : "días") + ": " + fmtMoney(elegido.valor) : ""}
+            </p>
+            <p className="ayuda ayuda-campo">Contamos los días con mes de 30 días. El 31 cuenta como 30.</p>
+
+            <div className="campo">
+              <label htmlFor="f-motivo">Motivo <span className="nota-campo">(opcional)</span></label>
+              <input
+                id="f-motivo"
+                type="text"
+                maxLength={200}
+                autoComplete="off"
+                placeholder="Ej. suspensión, licencia"
+                value={eleccion.motivo}
+                onChange={(e) => onEleccion({ ...eleccion, motivo: e.target.value })}
+              />
+            </div>
           </div>
         )}
-
-        <div>
-          {!dias.activo ? (
-            <button type="button" className="link" onClick={() => onDias({ activo: true, n: "", motivo: "" })}>
-              ¿Este mes se cobran días distintos? (suspensión, licencia, novedad)
-            </button>
-          ) : (
-            <div>
-              <div className="aviso info">
-                Úsalo solo si este mes se cobran más o menos días que los normales. El valor será tu honorario × días ÷ 30. Tu supervisor lo revisará.
-              </div>
-              <div className="campo">
-                <label htmlFor="dias-n">Días a cobrar (de 1 a 30)</label>
-                <input
-                  id="dias-n"
-                  type="tel"
-                  inputMode="numeric"
-                  maxLength={2}
-                  autoComplete="off"
-                  placeholder="Ej. 20"
-                  autoFocus
-                  value={dias.n}
-                  onChange={(e) => onDias({ ...dias, n: e.target.value.replace(/\D/g, "").slice(0, 2) })}
-                />
-              </div>
-              <div className="campo">
-                <label htmlFor="dias-motivo">Motivo (obligatorio)</label>
-                <input
-                  id="dias-motivo"
-                  type="text"
-                  maxLength={200}
-                  autoComplete="off"
-                  placeholder="Ej. Licencia no remunerada del 1 al 10"
-                  value={dias.motivo}
-                  onChange={(e) => onDias({ ...dias, motivo: e.target.value })}
-                />
-              </div>
-              <p className="ayuda" aria-live="polite">{calculoDias}</p>
-              <button type="button" className="link" onClick={() => onDias({ activo: false, n: "", motivo: "" })}>
-                Volver a los días normales
-              </button>
-            </div>
-          )}
-        </div>
       </div>
 
       <div className="seccion">

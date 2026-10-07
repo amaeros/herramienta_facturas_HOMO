@@ -162,6 +162,22 @@ input[aria-invalid=true], select[aria-invalid=true], textarea[aria-invalid=true]
 .dos { display: flex; gap: 10px; }
 .dos > * { flex: 1; min-width: 0; }
 
+/* opciones con botón de radio ("¿Qué vas a cobrar?"): cada opción es un renglón táctil completo */
+.opciones { border: 0; margin: 0 0 12px; padding: 0; min-width: 0; }
+.opciones > legend { padding: 0; margin: 0 0 8px; font-weight: 600; }
+.opcion {
+  display: flex; align-items: flex-start; gap: 12px; min-height: var(--tactil); margin: 0 0 8px; padding: 10px 12px;
+  font-weight: 400; background: var(--papel); border: var(--borde-control); border-radius: var(--radio-campo); cursor: pointer;
+}
+.opcion.marcada { border-color: var(--verde-homo); box-shadow: inset 0 0 0 1px var(--verde-homo); }
+.opcion input[type=radio] { flex: none; width: 24px; height: 24px; margin: 1px 0 0; accent-color: var(--verde-homo); cursor: pointer; }
+.opcion:has(input:focus-visible) { outline: var(--foco); outline-offset: 2px; }
+.opcion-texto { display: flex; flex-direction: column; min-width: 0; }
+.opcion-titulo { font-weight: 600; }
+.opcion-detalle { font-size: var(--t-ayuda); color: var(--texto-suave); }
+.rango { margin: 4px 0 0; }
+.rango-cuenta { margin: 0 0 4px; font-size: var(--t-sub); font-weight: 700; color: var(--verde-homo); }
+
 /* PIN y contraseña con botón "Ver" dentro del campo */
 .pin-wrap { position: relative; }
 .pin-wrap input { padding-right: 84px; }

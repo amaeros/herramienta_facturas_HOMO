@@ -12,7 +12,6 @@ export default function Entrada() {
   }, [router]);
   return (
     <div className={css.cargandoCaja} role="status">
-      <span className={css.rueda} aria-hidden="true" />
       Entrando…
     </div>
   );

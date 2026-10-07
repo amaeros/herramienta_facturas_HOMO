@@ -56,9 +56,9 @@ export default function PasoLogin({ avisar, limpiarAviso, onEntrar }: Props) {
 
   return (
     <section>
-      <p className="paso">Paso 1 de 4 · Entrar</p>
-      <h2>¿Quién eres?</h2>
-      <form className="card" onSubmit={entrar} noValidate>
+      <h2 className="titulo-paso">¿Quién eres?</h2>
+      <p className="ayuda">Escoge tu nombre y escribe tu PIN para entrar.</p>
+      <form onSubmit={entrar} noValidate>
         <div className="campo">
           <label htmlFor="nombre">Escoge tu nombre</label>
           <select id="nombre" value={nombre} onChange={(e) => setNombre(e.target.value)}>
@@ -104,7 +104,10 @@ export default function PasoLogin({ avisar, limpiarAviso, onEntrar }: Props) {
             Tu PIN son los <strong>últimos 4 números de tu cédula</strong>.
           </p>
         </div>
-        <button className="btn" type="submit" disabled={ocupado} style={{ marginBottom: 0 }}>Entrar</button>
+        <div className="relleno" aria-hidden="true" />
+        <div className="barra-fija">
+          <button className="btn" type="submit" disabled={ocupado}>Entrar</button>
+        </div>
       </form>
     </section>
   );

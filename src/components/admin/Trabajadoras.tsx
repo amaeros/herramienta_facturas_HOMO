@@ -5,6 +5,7 @@ import { AdminError, apiAdmin, textoError, type Contrato } from "./apiAdmin";
 import Dialogo from "./Dialogo";
 import FormularioTrabajadora from "./FormularioTrabajadora";
 import ImportarExcel from "./ImportarExcel";
+import PanelLateral from "./PanelLateral";
 import { enmascararCedula, filtrarContratos, nombreCoincide, payloadDeContrato, pesos } from "./helpers";
 import { useDatos } from "./useDatos";
 import { fmtFecha } from "../formato";
@@ -60,7 +61,7 @@ function CuerpoBorrar({ c, onCancelar, onBorrada, onDesactivar }: BorrarProps) {
               <strong>¿Solo quieres que no aparezca en el celular?</strong> Mejor <strong>desactívala</strong>: sus cuentas se conservan y la puedes activar cuando quieras.
               <div style={{ marginTop: 10 }}>
                 <button type="button" className={`${css.btn} ${css.btnSec} ${css.btnChico}`} onClick={onDesactivar} disabled={ocupado}>
-                  ⏸️ Desactivar en vez de borrar
+                  Desactivar en vez de borrar
                 </button>
               </div>
             </div>
@@ -90,7 +91,7 @@ function CuerpoBorrar({ c, onCancelar, onBorrada, onDesactivar }: BorrarProps) {
       {error && <div className="aviso error" role="alert">{error}</div>}
       <div className={css.accionesFin}>
         <button type="button" className={`${css.btn} ${css.btnPeligroLleno}`} onClick={borrar} disabled={!puede || ocupado}>
-          {ocupado ? "Borrando…" : "🗑️ Sí, borrar"}
+          {ocupado ? "Borrando…" : "Sí, borrar"}
         </button>
         <button type="button" className={`${css.btn} ${css.btnSec}`} onClick={onCancelar} disabled={ocupado}>
           No, cancelar
@@ -126,7 +127,7 @@ function CuerpoDesactivar({ c, onCancelar, onConfirmar }: DesactivarProps) {
       {error && <div className="aviso error" role="alert">{error}</div>}
       <div className={css.accionesFin}>
         <button type="button" className={css.btn} onClick={confirmar} disabled={ocupado}>
-          {ocupado ? "Desactivando…" : "⏸️ Sí, desactivar"}
+          {ocupado ? "Desactivando…" : "Sí, desactivar"}
         </button>
         <button type="button" className={`${css.btn} ${css.btnSec}`} onClick={onCancelar} disabled={ocupado}>
           No, cancelar
@@ -169,23 +170,6 @@ export default function Trabajadoras() {
     }
   }
 
-  if (vista.tipo === "formulario") {
-    return (
-      <FormularioTrabajadora
-        inicial={vista.contrato}
-        onCancelar={() => volverALista(null)}
-        onGuardado={(c) => {
-          modificar((lista) => {
-            const existe = lista.some((x) => x.id === c.id);
-            const siguiente = existe ? lista.map((x) => (x.id === c.id ? { ...c, cargas: x.cargas } : x)) : [...lista, c];
-            return siguiente.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
-          });
-          volverALista(vista.contrato ? `Se guardaron los cambios de ${c.nombre}.` : `${c.nombre} quedó creada.`);
-        }}
-      />
-    );
-  }
-
   if (vista.tipo === "importar") {
     return (
       <ImportarExcel
@@ -208,20 +192,19 @@ export default function Trabajadoras() {
         </div>
         <div className={css.acciones}>
           <button type="button" className={css.btn} onClick={() => { setExito(""); setFallo(""); setVista({ tipo: "formulario", contrato: null }); }}>
-            ➕ Nueva trabajadora
+            Nueva trabajadora
           </button>
           <button type="button" className={`${css.btn} ${css.btnSec}`} onClick={() => { setExito(""); setFallo(""); setVista({ tipo: "importar" }); }}>
-            📥 Importar desde Excel
+            Importar desde Excel
           </button>
         </div>
       </div>
 
-      {exito && <div className="aviso info" role="status">✅ {exito}</div>}
+      {exito && <div className="aviso info" role="status">{exito}</div>}
       {fallo && <div className="aviso error" role="alert">{fallo}</div>}
 
       {cargando && (
         <div className={css.cargandoCaja} role="status">
-          <span className={css.rueda} aria-hidden="true" />
           Cargando la lista…
         </div>
       )}
@@ -272,24 +255,24 @@ export default function Trabajadoras() {
                 </thead>
                 <tbody>
                   {lista.map((c) => (
-                    <tr key={c.id} className={c.activo ? undefined : css.inactiva}>
-                      <td data-label="Nombre">
+                    <tr key={c.id} className={c.activo ? css.estOk : `${css.estNeutro} ${css.inactiva}`}>
+                      <td data-label="Nombre" className={css.colNombre}>
                         <div className={css.celdaDer}>
                           <span className={css.nombreFila}>{c.nombre}</span>
                           <span className={css.sub}>Cédula {enmascararCedula(c.cedula)}</span>
                         </div>
                       </td>
-                      <td data-label="Contrato">{c.numeroContrato || <span className={css.opcional}>Por completar</span>}</td>
+                      <td data-label="Contrato" className={css.nowrap}>{c.numeroContrato || <span className={css.opcional}>Por completar</span>}</td>
                       <td data-label="Honorario" className={css.num}>{pesos(c.honorario)}</td>
                       <td data-label="Riesgo">
                         <div className={css.celdaDer}>
                           {c.riesgo}
-                          {c.riesgoNuevo && <span className={css.sub}>→ {c.riesgoNuevo} desde {fmtFecha(c.riesgoDesde)}</span>}
+                          {c.riesgoNuevo && <span className={css.sub}>Cambia a {c.riesgoNuevo} desde {fmtFecha(c.riesgoDesde)}</span>}
                         </div>
                       </td>
-                      <td data-label="Fechas">{c.inicio ? fmtFecha(c.inicio) : "—"} a {c.fin ? fmtFecha(c.fin) : "—"}</td>
+                      <td data-label="Fechas" className={css.num}>{c.inicio ? fmtFecha(c.inicio) : "—"} a {c.fin ? fmtFecha(c.fin) : "—"}</td>
                       <td data-label="Activa">
-                        <span className={`${css.pastilla} ${c.activo ? css.pOk : css.pGris}`}>{c.activo ? "Sí" : "No"}</span>
+                        <span className={css.estadoTxt}>{c.activo ? "Sí" : "No"}</span>
                       </td>
                       <td data-label="Cuentas" className={css.num}>{c.cargas}</td>
                       <td data-label="">
@@ -300,7 +283,7 @@ export default function Trabajadoras() {
                             onClick={() => { setExito(""); setFallo(""); setVista({ tipo: "formulario", contrato: c }); }}
                             aria-label={`Editar a ${c.nombre}`}
                           >
-                            ✏️ Editar
+                            Editar
                           </button>
                           {c.activo ? (
                             <button
@@ -310,7 +293,7 @@ export default function Trabajadoras() {
                               disabled={ocupadoId === c.id}
                               aria-label={`Desactivar a ${c.nombre}`}
                             >
-                              ⏸️ Desactivar
+                              Desactivar
                             </button>
                           ) : (
                             <button
@@ -320,7 +303,7 @@ export default function Trabajadoras() {
                               disabled={ocupadoId === c.id}
                               aria-label={`Activar a ${c.nombre}`}
                             >
-                              ▶️ Activar
+                              Activar
                             </button>
                           )}
                           <button
@@ -329,7 +312,7 @@ export default function Trabajadoras() {
                             onClick={() => setAccion({ tipo: "borrar", c })}
                             aria-label={`Borrar a ${c.nombre}`}
                           >
-                            🗑️ Borrar
+                            Borrar
                           </button>
                         </div>
                       </td>
@@ -341,6 +324,27 @@ export default function Trabajadoras() {
           )}
         </>
       )}
+
+      <PanelLateral
+        abierto={vista.tipo === "formulario"}
+        titulo={vista.tipo === "formulario" && vista.contrato ? `Editar a ${vista.contrato.nombre}` : "Nueva trabajadora"}
+        onCerrar={() => volverALista(null)}
+      >
+        {vista.tipo === "formulario" && (
+          <FormularioTrabajadora
+            inicial={vista.contrato}
+            onCancelar={() => volverALista(null)}
+            onGuardado={(c) => {
+              modificar((lista) => {
+                const existe = lista.some((x) => x.id === c.id);
+                const siguiente = existe ? lista.map((x) => (x.id === c.id ? { ...c, cargas: x.cargas } : x)) : [...lista, c];
+                return siguiente.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+              });
+              volverALista(vista.contrato ? `Se guardaron los cambios de ${c.nombre}.` : `${c.nombre} quedó creada.`);
+            }}
+          />
+        )}
+      </PanelLateral>
 
       <Dialogo
         abierto={accion?.tipo === "borrar"}

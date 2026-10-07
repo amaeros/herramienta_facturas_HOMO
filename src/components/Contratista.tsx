@@ -5,11 +5,14 @@ import { esSesionVencida, llamar, mensajeDeError, postJson } from "./api";
 import { cargarPdfjs, MSG_FOTO, MSG_PESO, prepararArchivo, problemaArchivo } from "./archivos";
 import Cargando from "./Cargando";
 import { DEBOUNCE_EVALUAR_MS } from "./constantes";
+import { tituloNombre } from "./formato";
+import type { HojaDatos } from "./Hoja";
 import { datosDeInputs, faltaAlgo, INPUTS_VACIOS, inputsDeLectura, type Inputs } from "./lectura";
 import PasoDatos, { type DiasEstado, type PeriodoEstado } from "./PasoDatos";
 import PasoFinal from "./PasoFinal";
 import PasoLogin from "./PasoLogin";
 import PasoVerificar from "./PasoVerificar";
+import Progreso from "./Progreso";
 import type {
   Adicional, DiasManualPayload, Evaluacion, MesInfo, RespEnviar, RespEvaluar, RespLogin, RespPlanilla, Resumen,
 } from "./tipos";
@@ -36,7 +39,7 @@ function problemaDias(d: DiasEstado): string {
 export default function Contratista() {
   const [pantalla, setPantalla] = useState<Pantalla>("login");
   const [aviso, setAviso] = useState<{ msg: string; tipo: "error" | "info" } | null>(null);
-  const [espera, setEspera] = useState({ titulo: "", texto: "" });
+  const [espera, setEspera] = useState<{ titulo: string; texto: string; paso: 2 | 3 }>({ titulo: "", texto: "", paso: 2 });
 
   const [contrato, setContrato] = useState<Resumen | null>(null);
   const [mesKey, setMesKey] = useState("");
@@ -75,8 +78,9 @@ export default function Contratista() {
     window.scrollTo(0, 0);
   }
 
-  function esperar(titulo: string, texto: string) {
-    setEspera({ titulo, texto });
+  /** `paso` solo sirve para dibujar el progreso: 2 = leyendo la planilla, 3 = generando la cuenta. */
+  function esperar(titulo: string, texto: string, paso: 2 | 3) {
+    setEspera({ titulo, texto, paso });
     mostrar("cargando");
   }
 
@@ -211,7 +215,7 @@ export default function Contratista() {
     }
     const pd = problemaDias(dias);
     if (pd) { avisar(pd); return; }
-    esperar("Leyendo tu planilla…", "Esto puede tardar hasta 30 segundos. No cierres esta pantalla.");
+    esperar("Leyendo tu planilla…", "Esto puede tardar hasta 30 segundos. No cierres esta pantalla.", 2);
     try {
       const r = await subirPlanilla(file, false);
       reqEval.current++;
@@ -313,6 +317,7 @@ export default function Contratista() {
     esperar(
       "Generando tu cuenta de cobro…",
       "Estamos guardando tu planilla y armando la cuenta de cobro en Excel. Puede tardar hasta un minuto.",
+      3,
     );
     try {
       const r = await apiJson<RespEnviar>("/api/enviar", {
@@ -358,9 +363,53 @@ export default function Contratista() {
     }
   }
 
+  // ---------------------------------------------------------------- la hoja (solo se dibuja; no cambia nada de lo anterior)
+  /** Lo que ya se sabe en el paso 2: mes, periodo y valor. */
+  function hojaDelMes(): HojaDatos {
+    if (!contrato || !mes) return {};
+    const f = fechasActuales();
+    let valor: number | null = mes.valor;
+    let nDias: number | null = mes.dias;
+    if (dias.activo) {
+      const n = Number(dias.n);
+      const bien = dias.n.trim() !== "" && Number.isInteger(n) && n >= 1 && n <= 30;
+      valor = bien ? Math.round((contrato.honorario * n) / 30) : null;
+      nDias = bien ? n : null;
+    } else if (periodo.editable) {
+      valor = null; // con fechas distintas, el valor lo calcula el servidor al leer la planilla
+      nDias = null;
+    }
+    return {
+      docNum: mesKey.replace("-", ""),
+      nombre: tituloNombre(contrato.nombre),
+      inicio: f.inicio,
+      corte: f.corte,
+      dias: nDias,
+      valor,
+    };
+  }
+
+  /** Lo del paso 2 más lo que se leyó de la planilla (pasos 3 y 4). */
+  function hojaConPlanilla(): HojaDatos {
+    const d = datosDeInputs(inputs);
+    return {
+      ...hojaDelMes(),
+      planilla: d.numero || null,
+      mesCotizado: d.periodo || null,
+      salud: d.salud,
+      pension: d.pension,
+      arl: d.arl,
+    };
+  }
+
+  const pasoActual: 1 | 2 | 3 | 4 =
+    pantalla === "login" ? 1 : pantalla === "datos" ? 2 : pantalla === "cargando" ? espera.paso : pantalla === "verificar" ? 3 : 4;
+
   // ---------------------------------------------------------------- pintar
   return (
-    <main>
+    <main className="contenido">
+      <Progreso paso={pasoActual} />
+
       {aviso && (
         <div className={"aviso " + aviso.tipo} role="alert">{aviso.msg}</div>
       )}
@@ -373,6 +422,7 @@ export default function Contratista() {
           mes={mes}
           periodo={periodo}
           dias={dias}
+          hoja={hojaDelMes()}
           onMes={cambiarMes}
           onPeriodo={setPeriodo}
           onDias={setDias}
@@ -381,10 +431,17 @@ export default function Contratista() {
         />
       )}
 
-      {pantalla === "cargando" && <Cargando titulo={espera.titulo} texto={espera.texto} />}
+      {pantalla === "cargando" && (
+        <Cargando
+          titulo={espera.titulo}
+          texto={espera.texto}
+          hoja={espera.paso === 2 ? hojaDelMes() : hojaConPlanilla()}
+        />
+      )}
 
       {pantalla === "verificar" && (
         <PasoVerificar
+          hoja={hojaConPlanilla()}
           mesKey={mesKey}
           inputs={inputs}
           onInputs={alEditar}
@@ -406,7 +463,7 @@ export default function Contratista() {
       )}
 
       {pantalla === "final" && final && (
-        <PasoFinal resp={final} ocupado={refrescando} onOtroMes={otroMes} onSalir={salir} />
+        <PasoFinal resp={final} hoja={hojaConPlanilla()} ocupado={refrescando} onOtroMes={otroMes} onSalir={salir} />
       )}
     </main>
   );

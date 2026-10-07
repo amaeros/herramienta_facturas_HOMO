@@ -27,7 +27,7 @@ export default function AyudaPlanilla({ abierta }: { abierta: boolean }) {
         <text x="22" y="177" fontSize="10" fill="#5a4000">Riesgos laborales (ARL)</text><text x="222" y="177" fontSize="10" fill="#5a4000" fontWeight="bold">$ 70.000</text>
         <circle cx="292" cy="173" r="9" fill="#0b5640" /><text x="288.5" y="177" fontSize="11" fill="#fff" fontWeight="bold">5</text>
         <rect x="16" y="186" width="288" height="18" fill="#f1f1f1" />
-        <text x="22" y="199" fontSize="10" fill="#8a8a8a">Caja de compensación · intereses de mora (no van)</text>
+        <text x="22" y="199" fontSize="10" fill="#8a8a8a">Caja de compensación e intereses de mora (no van)</text>
         <text x="16" y="228" fontSize="9" fill="#5c6b65">Ejemplo: tu planilla puede verse distinta, busca las mismas palabras.</text>
       </svg>
       <ol className="leyenda">

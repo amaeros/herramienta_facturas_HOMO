@@ -113,13 +113,13 @@ function FormParametrosPantalla({ inicial, onGuardado }: FormProps) {
   const e = errores;
 
   return (
-    <div className={css.pagina} role="main" aria-labelledby={idTitulo}>
+    <div className={css.paginaForm} role="main" aria-labelledby={idTitulo}>
       <h1 id={idTitulo} className={css.h1}>Parámetros</h1>
       <p className={css.lead}>
         Son los porcentajes y valores con los que se calcula la seguridad social. Cámbialos solo si cambió la norma (por ejemplo, un salario mínimo nuevo).
       </p>
 
-      {exito && <div className="aviso info" role="status">✅ {exito}</div>}
+      {exito && <div className="aviso info" role="status">{exito}</div>}
       {errorGeneral && <div className="aviso error" role="alert">{errorGeneral}</div>}
 
       <form onSubmit={guardar} noValidate>
@@ -167,7 +167,7 @@ function FormParametrosPantalla({ inicial, onGuardado }: FormProps) {
         </fieldset>
 
         <div className={css.accionesFin}>
-          <button type="submit" className={css.btn} disabled={ocupado}>{ocupado ? "Guardando…" : "💾 Guardar parámetros"}</button>
+          <button type="submit" className={css.btn} disabled={ocupado}>{ocupado ? "Guardando…" : "Guardar parámetros"}</button>
           <button
             type="button"
             className={`${css.btn} ${css.btnSec}`}
@@ -189,11 +189,10 @@ export default function Parametros() {
   if (datos) return <FormParametrosPantalla inicial={datos} onGuardado={(p) => modificar(() => p)} />;
 
   return (
-    <div className={css.pagina} role="main">
+    <div className={css.paginaForm} role="main">
       <h1 className={css.h1}>Parámetros</h1>
       {cargando && (
         <div className={css.cargandoCaja} role="status">
-          <span className={css.rueda} aria-hidden="true" />
           Cargando los parámetros…
         </div>
       )}

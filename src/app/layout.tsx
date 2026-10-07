@@ -1,5 +1,14 @@
 import type { Metadata, Viewport } from "next";
+import { Atkinson_Hyperlegible_Next } from "next/font/google";
 import "./globals.css";
+
+// Una sola familia, pensada para leerse bien en pantallas pequeñas y con prisa. Pesos 400, 600 y 700.
+const fuente = Atkinson_Hyperlegible_Next({
+  subsets: ["latin", "latin-ext"],
+  weight: ["400", "600", "700"],
+  display: "swap",
+  variable: "--fuente",
+});
 
 export const metadata: Metadata = {
   title: "Cuenta de cobro HOMO",
@@ -10,12 +19,13 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#0b5640",
+  viewportFit: "cover",
+  themeColor: "#ffffff",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="es">
+    <html lang="es" className={fuente.variable}>
       <body>{children}</body>
     </html>
   );

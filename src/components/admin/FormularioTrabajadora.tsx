@@ -140,9 +140,11 @@ export default function FormularioTrabajadora({ inicial, onGuardado, onCancelar 
   const e = errores;
 
   return (
-    <div className={css.pagina} role="main" aria-labelledby={idTitulo}>
-      <button type="button" className={css.volver} onClick={onCancelar}>← Volver a la lista</button>
-      <h1 id={idTitulo} className={css.h1}>{inicial ? `Editar a ${inicial.nombre}` : "Nueva trabajadora"}</h1>
+    <div className={css.panelCuerpo}>
+      <div className={css.panelCabecera}>
+        <h2 id={idTitulo} className={css.h1}>{inicial ? `Editar a ${inicial.nombre}` : "Nueva trabajadora"}</h2>
+        <button type="button" className={css.volver} onClick={onCancelar}>Cerrar</button>
+      </div>
       <p className={css.lead}>Llena los datos y toca «Guardar». Los campos con «opcional» pueden quedar vacíos.</p>
 
       {errorGeneral && <div className="aviso error" role="alert">{errorGeneral}</div>}
@@ -150,7 +152,7 @@ export default function FormularioTrabajadora({ inicial, onGuardado, onCancelar 
       <form onSubmit={guardar} noValidate>
         <fieldset className={css.grupo}>
           <legend>Datos personales</legend>
-          <div className={css.rejilla}>
+          <div className={css.rejilla2}>
             <Campo campo="nombre" etiqueta="Nombre completo" valor={f.nombre} onCambio={(v) => poner("nombre", v)} error={e.nombre} ancho
               hint="Con este nombre la trabajadora entra desde el celular." autoComplete="off" />
             <Campo campo="cedula" etiqueta="Cédula" valor={f.cedula} onCambio={(v) => poner("cedula", v)} error={e.cedula} inputMode="numeric"
@@ -165,7 +167,7 @@ export default function FormularioTrabajadora({ inicial, onGuardado, onCancelar 
 
         <fieldset className={css.grupo}>
           <legend>Contrato</legend>
-          <div className={css.rejilla}>
+          <div className={css.rejilla2}>
             <Campo campo="numeroContrato" etiqueta="Número del contrato" valor={f.numeroContrato} onCambio={(v) => poner("numeroContrato", v)} error={e.numeroContrato} opcional />
             <Campo campo="cargo" etiqueta="Cargo" valor={f.cargo} onCambio={(v) => poner("cargo", v)} error={e.cargo} opcional />
             <Campo campo="linea" etiqueta="Línea de política pública" valor={f.linea} onCambio={(v) => poner("linea", v)} error={e.linea} opcional ancho />
@@ -188,7 +190,7 @@ export default function FormularioTrabajadora({ inicial, onGuardado, onCancelar 
 
         <fieldset className={css.grupo}>
           <legend>ARL (riesgo)</legend>
-          <div className={css.rejilla}>
+          <div className={css.rejilla2}>
             <div className={css.campo}>
               <label className={css.etiqueta} htmlFor="f-riesgo">Nivel de riesgo</label>
               <select id="f-riesgo" value={f.riesgo} onChange={(ev) => poner("riesgo", ev.target.value)} aria-invalid={e.riesgo ? true : undefined}>
@@ -223,7 +225,7 @@ export default function FormularioTrabajadora({ inicial, onGuardado, onCancelar 
 
         <fieldset className={css.grupo}>
           <legend>Quién revisó</legend>
-          <div className={css.rejilla}>
+          <div className={css.rejilla2}>
             <Campo campo="revisoNombre" etiqueta="Nombre de quien revisó" valor={f.revisoNombre} onCambio={(v) => poner("revisoNombre", v)} error={e.revisoNombre} opcional />
             <Campo campo="revisoCargo" etiqueta="Cargo de quien revisó" valor={f.revisoCargo} onCambio={(v) => poner("revisoCargo", v)} error={e.revisoCargo} opcional />
           </div>
@@ -237,8 +239,8 @@ export default function FormularioTrabajadora({ inicial, onGuardado, onCancelar 
           </label>
         </fieldset>
 
-        <div className={css.accionesFin}>
-          <button type="submit" className={css.btn} disabled={ocupado}>{ocupado ? "Guardando…" : "💾 Guardar"}</button>
+        <div className={css.panelBarra}>
+          <button type="submit" className={css.btn} disabled={ocupado}>{ocupado ? "Guardando…" : "Guardar"}</button>
           <button type="button" className={`${css.btn} ${css.btnSec}`} onClick={onCancelar} disabled={ocupado}>Cancelar</button>
         </div>
       </form>

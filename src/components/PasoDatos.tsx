@@ -2,7 +2,8 @@
 
 import type { ChangeEvent } from "react";
 import { MAX_BYTES } from "./archivos";
-import { fmtFecha, fmtMoney, tituloNombre } from "./formato";
+import { fmtMoney, tituloNombre } from "./formato";
+import Hoja, { type HojaDatos } from "./Hoja";
 import type { MesInfo, Resumen } from "./tipos";
 
 export interface PeriodoEstado {
@@ -22,6 +23,7 @@ interface Props {
   mes: MesInfo;
   periodo: PeriodoEstado;
   dias: DiasEstado;
+  hoja: HojaDatos;
   onMes: (key: string) => void;
   onPeriodo: (p: PeriodoEstado) => void;
   onDias: (d: DiasEstado) => void;
@@ -29,8 +31,8 @@ interface Props {
   onSalir: () => void;
 }
 
-/** Paso 2: mes a cobrar, periodo, días a mano (opcional) y la planilla. */
-export default function PasoDatos({ contrato: c, mes, periodo, dias, onMes, onPeriodo, onDias, onArchivo, onSalir }: Props) {
+/** Paso 2: mes a cobrar, periodo, días a mano (opcional) y la planilla. La hoja muestra mes, periodo y valor. */
+export default function PasoDatos({ contrato: c, mes, periodo, dias, hoja, onMes, onPeriodo, onDias, onArchivo, onSalir }: Props) {
   const n = Number(dias.n);
   const calculoDias =
     n >= 1 && n <= 30 && Math.floor(n) === n
@@ -46,14 +48,13 @@ export default function PasoDatos({ contrato: c, mes, periodo, dias, onMes, onPe
 
   return (
     <section>
-      <p className="paso">Paso 2 de 4 · Mes y planilla</p>
-      <h2>Hola, {tituloNombre(c.nombre.split(" ").slice(0, 2).join(" "))}</h2>
-      <div className="card">
-        <div className="fila"><span className="et">Contrato n.º</span><span className="val">{c.numeroContrato || "—"}</span></div>
-        <div className="fila"><span className="et">Honorario mensual</span><span className="val">{fmtMoney(c.honorario)}</span></div>
-      </div>
+      <h2 className="titulo-paso">Hola, {tituloNombre(c.nombre.split(" ").slice(0, 2).join(" "))}</h2>
+      <dl className="renglones">
+        <div className="renglon"><dt>Contrato n.º</dt><dd className="cifra">{c.numeroContrato || "—"}</dd></div>
+        <div className="renglon"><dt>Honorario mensual</dt><dd className="cifra">{fmtMoney(c.honorario)}</dd></div>
+      </dl>
 
-      <div className="card">
+      <div className="seccion">
         <div className="campo">
           <label htmlFor="mes">Mes a cobrar</label>
           <select id="mes" value={mes.key} onChange={(e) => onMes(e.target.value)}>
@@ -69,14 +70,9 @@ export default function PasoDatos({ contrato: c, mes, periodo, dias, onMes, onPe
         )}
 
         {!periodo.editable ? (
-          <div>
-            <div className="fila"><span className="et">Desde</span><span className="val">{fmtFecha(mes.inicio)}</span></div>
-            <div className="fila"><span className="et">Hasta</span><span className="val">{fmtFecha(mes.corte)}</span></div>
-            <div className="fila"><span className="et">Días · Valor del mes</span><span className="val">{mes.dias} días · {fmtMoney(mes.valor)}</span></div>
-            <button type="button" className="link" onClick={() => onPeriodo({ editable: true, inicio: mes.inicio, corte: mes.corte })}>
-              ¿Tuviste una novedad? Cambiar fechas
-            </button>
-          </div>
+          <button type="button" className="link" onClick={() => onPeriodo({ editable: true, inicio: mes.inicio, corte: mes.corte })}>
+            ¿Tuviste una novedad? Cambiar fechas
+          </button>
         ) : (
           <div>
             <div className="aviso info">Cambia las fechas solo si empezaste o terminaste a mitad de mes. Tu supervisor las revisará.</div>
@@ -141,18 +137,29 @@ export default function PasoDatos({ contrato: c, mes, periodo, dias, onMes, onPe
         </div>
       </div>
 
-      <div className="card">
-        <h3 style={{ marginTop: 0 }}>Sube tu planilla de seguridad social</h3>
+      <div className="seccion">
+        <h3>Sube tu planilla de seguridad social</h3>
         <p className="ayuda">
-          Es la planilla PILA que pagaste (PDF o una foto clara). Normalmente es del mes que vas a cobrar o del mes anterior. Si pagaste más de una planilla (una corrección, por ejemplo), sube aquí la principal y después podrás agregar las otras.
+          Es la planilla PILA que pagaste (PDF o una foto clara). La resumida o la detallada sirven; el comprobante del banco no. Normalmente es del mes que vas a cobrar o del mes anterior. Si pagaste más de una planilla (una corrección, por ejemplo), sube aquí la principal y después podrás agregar las otras.
         </p>
         <input id="archivo" className="oculto" type="file" accept="application/pdf,image/*" onChange={alElegir} />
-        <label className="btn" htmlFor="archivo">Elegir PDF o foto</label>
+        <label className="zona-subida foco-archivo" htmlFor="archivo">
+          <span className="zona-subida-titulo">Elegir PDF o foto</span>
+          <span className="zona-subida-ayuda">Máximo {MAX_BYTES / (1024 * 1024)} MB. Solo PDF, JPG o PNG.</span>
+        </label>
         <input id="archivo-cam" className="oculto" type="file" accept="image/*" capture="environment" onChange={alElegir} />
-        <label className="btn sec" htmlFor="archivo-cam">Tomar una foto ahora</label>
-        <p className="ayuda" style={{ margin: 0 }}>Máximo {MAX_BYTES / (1024 * 1024)} MB. Solo PDF, JPG o PNG.</p>
+        <label className="btn sec foco-archivo" htmlFor="archivo-cam">Tomar una foto ahora</label>
       </div>
+
+      <Hoja {...hoja} />
+
       <button type="button" className="link" onClick={onSalir}>Salir</button>
+
+      <div className="relleno" aria-hidden="true" />
+
+      <div className="barra-fija">
+        <label className="btn foco-archivo" htmlFor="archivo">Elegir PDF o foto</label>
+      </div>
     </section>
   );
 }

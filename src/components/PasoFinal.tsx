@@ -1,36 +1,50 @@
 "use client";
 
+import Hoja, { type HojaDatos } from "./Hoja";
 import Semaforo, { claseEstado } from "./Semaforo";
 import type { RespEnviar } from "./tipos";
 
 interface Props {
   resp: RespEnviar;
+  /** lo que la hoja ya sabe: mes, periodo, valor y lo leído de la planilla */
+  hoja: HojaDatos;
   ocupado: boolean;
   onOtroMes: () => void;
   onSalir: () => void;
 }
 
-/** Paso 4: resultado del envío y descarga del Excel (el link es del mismo sitio y responde con el .xlsx). */
-export default function PasoFinal({ resp: r, ocupado, onOtroMes, onSalir }: Props) {
+/** Paso 4: la hoja completa con su sello, el resultado del envío y la descarga del Excel (el link es del mismo sitio y responde con el .xlsx). */
+export default function PasoFinal({ resp: r, hoja, ocupado, onOtroMes, onSalir }: Props) {
   const factura = r.factura && r.factura.url ? r.factura : null;
-  const titulo = !factura
+  const clase = claseEstado(r.estado);
+  const frase = !factura
     ? "Enviado, pero falta la cuenta de cobro"
     : r.estado === "OK"
-      ? "¡Listo! Todo en orden"
+      ? "Todo cuadra"
       : r.estado === "REVISAR"
-        ? "Cuenta de cobro lista, tu supervisor la revisará"
-        : "Cuenta de cobro lista, con una alerta para tu supervisor";
+        ? "Revisa esto"
+        : "Hay un problema";
+  const nota = !factura
+    ? ""
+    : r.estado === "REVISAR"
+      ? "Tu cuenta de cobro está lista y tu supervisor la revisará."
+      : r.estado === "ERROR"
+        ? "Tu cuenta de cobro está lista, con una alerta para tu supervisor."
+        : "";
 
   return (
     <section>
-      <p className="paso">Paso 4 de 4 · Listo</p>
-      <Semaforo clase={claseEstado(r.estado)} emoji={r.emoji} titulo={titulo} mensaje={r.mensaje} />
+      <h2 className="titulo-paso">{factura ? "Tu cuenta de cobro está lista" : "Recibimos tu planilla"}</h2>
+
+      <Hoja {...hoja} estado={clase} completa={!!factura} />
+
+      <div style={{ marginTop: 16 }}>
+        <Semaforo clase={clase} frase={frase} mensaje={r.mensaje} nota={nota} />
+      </div>
       {r.aviso && <div className="aviso warn">{r.aviso}</div>}
+
       {factura ? (
         <div>
-          <a className="btn" href={factura.url} download={factura.nombre || undefined}>
-            Descargar cuenta de cobro (Excel)
-          </a>
           <div className="aviso info">
             <strong>Recuerda:</strong> firma la cuenta de cobro y entrégala con tu informe de actividades.
           </div>
@@ -41,8 +55,27 @@ export default function PasoFinal({ resp: r, ocupado, onOtroMes, onSalir }: Prop
           No pudimos crear la cuenta de cobro (Excel) en este momento. Tu envío quedó registrado y tu supervisor puede generarla desde su panel.
         </div>
       )}
-      <button type="button" className="btn sec" disabled={ocupado} onClick={onOtroMes}>Enviar otro mes</button>
+
+      {factura && (
+        <button type="button" className="btn sec" disabled={ocupado} onClick={onOtroMes}>
+          Enviar otro mes
+        </button>
+      )}
       <button type="button" className="link" onClick={onSalir}>Salir</button>
+
+      <div className="relleno" aria-hidden="true" />
+
+      <div className="barra-fija">
+        {factura ? (
+          <a className="btn" href={factura.url} download={factura.nombre || undefined}>
+            Descargar Excel
+          </a>
+        ) : (
+          <button type="button" className="btn" disabled={ocupado} onClick={onOtroMes}>
+            Enviar otro mes
+          </button>
+        )}
+      </div>
     </section>
   );
 }

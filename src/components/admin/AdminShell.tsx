@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -84,9 +85,9 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
     <>
       <header className={css.barra}>
         <div className={css.barraInterior}>
-          <div>
-            <div className={css.marca}>Hospital Mental de Antioquia · HOMO</div>
-            <div className={css.marcaTitulo}>Panel del supervisor</div>
+          <div className={css.marca}>
+            <Image src="/homo-logo.png" alt="Hospital Mental de Antioquia" width={28} height={31} priority className={css.marcaLogo} />
+            <span className={css.marcaTitulo}>Panel del supervisor</span>
           </div>
           {dentro && (
             <nav className={css.nav} aria-label="Secciones del panel">
@@ -103,17 +104,18 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
                   </Link>
                 );
               })}
-              <button type="button" className={css.navSalir} onClick={salir} disabled={saliendo}>
-                {saliendo ? "Saliendo…" : "Salir"}
-              </button>
             </nav>
+          )}
+          {dentro && (
+            <button type="button" className={css.navSalir} onClick={salir} disabled={saliendo}>
+              {saliendo ? "Saliendo…" : "Salir"}
+            </button>
           )}
         </div>
       </header>
 
       {estado.tipo === "verificando" && (
         <div className={css.cargandoCaja} role="status">
-          <span className={css.rueda} aria-hidden="true" />
           Revisando tu sesión…
         </div>
       )}

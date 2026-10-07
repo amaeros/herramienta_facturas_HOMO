@@ -90,8 +90,8 @@ export default function AdicionalesCard({ adicionales, mesKey, subir, onAgregar,
   }
 
   return (
-    <div className="card">
-      <h3 style={{ marginTop: 0 }}>¿Pagaste más de una planilla?</h3>
+    <div className="seccion">
+      <h3>¿Pagaste más de una planilla?</h3>
       <p className="ayuda">
         Si este mes pagaste una corrección, un ajuste de ARL u otra planilla (por ejemplo de un mes anterior), agrégala para que salga en tu cuenta de cobro. Puedes agregar hasta 3.
       </p>
@@ -99,8 +99,12 @@ export default function AdicionalesCard({ adicionales, mesKey, subir, onAgregar,
         <ul className="adic-lista" aria-label="Planillas adicionales agregadas">
           {adicionales.map((a, i) => (
             <li key={i}>
-              <span>
-                {"Planilla " + (i + 2) + " · n.º " + a.numero + " · " + labelMes(a.periodo) + " · " + fmtMoney(a.valor) + (a.tempId ? " · con PDF" : "")}
+              <span className="adic-datos">
+                <strong>{"Planilla " + (i + 2)}</strong>
+                <span className="cifra">{"n.º " + a.numero}</span>
+                <span>{labelMes(a.periodo)}</span>
+                <span className="cifra">{fmtMoney(a.valor)}</span>
+                {a.tempId && <span>con PDF</span>}
               </span>
               <button type="button" className="quitar" aria-label={"Quitar la planilla " + (i + 2)} onClick={() => onQuitar(i)}>
                 Quitar
@@ -110,13 +114,13 @@ export default function AdicionalesCard({ adicionales, mesKey, subir, onAgregar,
         </ul>
       )}
       {!abierto && adicionales.length < MAX_ADICIONALES && (
-        <button type="button" className="btn sec" onClick={abrir}>＋ Agregar otra planilla (corrección o adicional)</button>
+        <button type="button" className="btn sec" onClick={abrir}>Agregar otra planilla (corrección o adicional)</button>
       )}
       {abierto && (
         <div className="adic-form">
           <h4>{"Planilla " + (adicionales.length + 2)}</h4>
           <input id="archivo-adic" className="oculto" type="file" accept="application/pdf,image/*" onChange={alElegir} />
-          <label className="btn sec" htmlFor="archivo-adic">Subir el PDF o la foto de esa planilla (opcional)</label>
+          <label className="btn sec foco-archivo" htmlFor="archivo-adic">Subir el PDF o la foto de esa planilla (opcional)</label>
           {estado && <p className="ayuda" role="status">{estado}</p>}
           <div className={"dato" + (faltas.numero ? " falta" : "")}>
             <label className="et" htmlFor="a-numero">N.º de planilla (solo números)</label>

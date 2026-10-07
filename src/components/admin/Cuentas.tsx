@@ -2,9 +2,9 @@
 
 import { useId, useState } from "react";
 import { apiAdmin, textoError, urlFactura, urlPlanilla, type Carga } from "./apiAdmin";
-import { etiquetaEstado, etiquetaLectura, fmtFechaHora, fmtPct, pesos, ultimosMeses } from "./helpers";
+import { etiquetaEstado, etiquetaLectura, fmtFechaHora, fmtPct, mesAnterior, pesos, ultimosMeses } from "./helpers";
 import { useDatos, useMesActual, useMesPorDefecto } from "./useDatos";
-import { labelMes } from "../formato";
+import { labelMes, pad2 } from "../formato";
 import css from "./admin.module.css";
 
 type Guardado = { tipo: "nada" } | { tipo: "guardando" } | { tipo: "ok" } | { tipo: "error"; msg: string };
@@ -19,8 +19,13 @@ function Indicador({ g }: { g: Guardado }) {
   );
 }
 
-function clasePastilla(estado: string): string {
-  return estado === "OK" ? css.pOk : estado === "REVISAR" ? css.pRev : css.pErr;
+function claseEstado(estado: string): string {
+  return estado === "OK" ? css.estOk : estado === "REVISAR" ? css.estRev : css.estErr;
+}
+
+function mesSiguiente(key: string): string {
+  const [y, m] = key.split("-").map(Number);
+  return m === 12 ? y + 1 + "-01" : y + "-" + pad2(m + 1);
 }
 
 function FilaCuenta({ c }: { c: Carga }) {
@@ -65,28 +70,29 @@ function FilaCuenta({ c }: { c: Carga }) {
 
   return (
     <>
-      <tr>
+      <tr className={claseEstado(c.estado)}>
         <td data-label="Estado">
-          <span>
-            <span className={css.emoji} aria-hidden="true">{c.emoji || "•"}</span>{" "}
-            <span className={`${css.pastilla} ${clasePastilla(c.estado)}`}>{etiquetaEstado(c.estado)}</span>
-          </span>
+          <span className={css.estadoTxt}>{etiquetaEstado(c.estado)}</span>
         </td>
-        <td data-label="Trabajadora">
+        <td data-label="Trabajadora" className={css.colNombre}>
           <span className={css.nombreFila}>{c.nombre}</span>
         </td>
         <td data-label="Valor" className={css.num}>
-          {pesos(c.valor)}
-          {c.dias !== null && <span className={css.sub}>{c.dias} días</span>}
+          <div className={css.celdaDer}>
+            {pesos(c.valor)}
+            {c.dias !== null && <span className={css.sub}>{c.dias} días</span>}
+          </div>
         </td>
         <td data-label="Seguridad social" className={css.num}>
-          <span className={css.sub}>Esperada: {pesos(c.ssEsperada)}</span>
-          <span className={css.sub}>Declarada: {pesos(c.ssDeclarada)}</span>
-          {dif !== null && dif !== 0 && (
-            <span className={css.sub} style={{ color: dif < 0 ? "var(--err)" : "var(--rev)", fontWeight: 700 }}>
-              {dif < 0 ? "Pagó " + pesos(-dif) + " menos" : "Pagó " + pesos(dif) + " más"}
-            </span>
-          )}
+          <div className={css.celdaDer}>
+            <span className={css.sub}>Esperada: {pesos(c.ssEsperada)}</span>
+            <span className={css.sub}>Declarada: {pesos(c.ssDeclarada)}</span>
+            {dif !== null && dif !== 0 && (
+              <span className={`${css.sub} ${css.subAlerta}`} style={{ color: dif < 0 ? "var(--rojo)" : "var(--ambar)" }}>
+                {dif < 0 ? "Pagó " + pesos(-dif) + " menos" : "Pagó " + pesos(dif) + " más"}
+              </span>
+            )}
+          </div>
         </td>
         <td data-label="Mensaje">
           <button
@@ -165,7 +171,7 @@ function FilaCuenta({ c }: { c: Carga }) {
               {c.adicionales.length > 0 && (
                 <div>
                   Planillas adicionales:{" "}
-                  <strong>{c.adicionales.map((a) => `n.º ${a.numero || "—"} (${pesos(a.valor)})`).join(" · ")}</strong>
+                  <strong>{c.adicionales.map((a) => `n.º ${a.numero || "—"} (${pesos(a.valor)})`).join(", ")}</strong>
                 </div>
               )}
             </div>
@@ -190,34 +196,42 @@ export default function Cuentas() {
   const aprobadas = cargas.filter((c) => c.aprobado).length;
   const conAlerta = cargas.filter((c) => c.estado !== "OK").length;
 
+  const oldest = opciones.length ? opciones[opciones.length - 1].key : "";
+  const puedeAtras = !!mes && !!oldest && mes > oldest;
+  const puedeAdelante = !!mes && !!mesActual && mes < mesActual;
+
   return (
     <div className={css.pagina} role="main">
-      <div className={css.encabezadoPagina}>
-        <div>
-          <h1 className={css.h1}>Cuentas del mes</h1>
-          <p className={css.lead} style={{ margin: 0 }}>
-            Revisa lo que enviaron las trabajadoras, descarga su Excel y marca las que ya aprobaste.
-          </p>
-        </div>
-        <div className={`${css.campo} ${css.selectorMes}`} style={{ marginBottom: 0, width: "100%" }}>
-          <label className={css.etiqueta} htmlFor="selector-mes">
-            ¿De qué mes?
-          </label>
-          <select id="selector-mes" value={mes ?? ""} onChange={(e) => setElegido(e.target.value)} disabled={!mes}>
-            {!mes && <option value="">Cargando…</option>}
-            {mes && !opciones.some((o) => o.key === mes) && <option value={mes}>{labelMes(mes)}</option>}
-            {opciones.map((o) => (
-              <option key={o.key} value={o.key}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </div>
+      <div className={css.mesNav}>
+        <button
+          type="button"
+          className={css.mesBtn}
+          aria-label="Mes anterior"
+          disabled={!puedeAtras}
+          onClick={() => mes && setElegido(mesAnterior(mes))}
+        >
+          ‹
+        </button>
+        <h1 className={css.mes}>
+          <span className={css.soloLectura}>Cuentas de </span>
+          {mes ? labelMes(mes) : "Cargando…"}
+        </h1>
+        <button
+          type="button"
+          className={css.mesBtn}
+          aria-label="Mes siguiente"
+          disabled={!puedeAdelante}
+          onClick={() => mes && setElegido(mesSiguiente(mes))}
+        >
+          ›
+        </button>
       </div>
+      <p className={css.lead} style={{ margin: 0 }}>
+        Revisa lo que enviaron las trabajadoras, descarga su Excel y marca las que ya aprobaste.
+      </p>
 
       {cargando && (
         <div className={css.cargandoCaja} role="status">
-          <span className={css.rueda} aria-hidden="true" />
           Cargando las cuentas de {mes ? labelMes(mes) : "este mes"}…
         </div>
       )}
@@ -269,10 +283,10 @@ export default function Cuentas() {
             </div>
           )}
 
-          <section className={css.tarjeta} style={{ marginTop: 16 }} aria-labelledby="faltan-titulo">
+          <section className={css.seccion} aria-labelledby="faltan-titulo">
             <h2 id="faltan-titulo" className={css.h2}>Faltan por enviar</h2>
             {faltan.length === 0 ? (
-              <p style={{ margin: 0 }}>✅ Todas las trabajadoras activas ya enviaron su cuenta de {labelMes(mes as string)}.</p>
+              <p style={{ margin: 0 }}>Todas las trabajadoras activas ya enviaron su cuenta de {labelMes(mes as string)}.</p>
             ) : (
               <ul className={css.lista}>
                 {faltan.map((f) => (

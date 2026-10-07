@@ -82,7 +82,7 @@ export default function ImportarExcel({ onTerminar }: Props) {
 
   return (
     <div className={css.pagina} role="main">
-      <button type="button" className={css.volver} onClick={() => onTerminar(null)} disabled={ocupado}>← Volver a la lista</button>
+      <button type="button" className={css.volver} onClick={() => onTerminar(null)} disabled={ocupado}>Volver a la lista</button>
       <h1 className={css.h1}>Importar desde Excel</h1>
       <p className={css.lead}>
         Sube el Excel de control de las trabajadoras. Primero te mostramos qué cambiaría y solo se guarda cuando toques «Aplicar cambios».
@@ -91,14 +91,14 @@ export default function ImportarExcel({ onTerminar }: Props) {
       {error && <div className="aviso error" role="alert">{error}</div>}
 
       {(fase.tipo === "elegir" || fase.tipo === "revisando") && (
-        <section className={css.tarjeta}>
+        <section className={css.zonaArchivo}>
           <input ref={entrada} id="archivo-excel" className="oculto" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={elegido} disabled={ocupado} />
-          <label htmlFor="archivo-excel" className={css.btn} style={{ display: "inline-flex" }} aria-disabled={ocupado}>
-            📥 Escoger el archivo de Excel
+          <label htmlFor="archivo-excel" className={`${css.btn} foco-archivo`} style={{ display: "inline-flex" }} aria-disabled={ocupado}>
+            Escoger el archivo de Excel
           </label>
           <p className={css.pista}>Formato .xlsx, máximo 1 MB y 200 filas. El archivo no se guarda.</p>
           {fase.tipo === "revisando" && (
-            <p role="status" style={{ marginTop: 12 }}><span className={css.rueda} aria-hidden="true" />Revisando el archivo…</p>
+            <p role="status" style={{ marginTop: 12 }}>Revisando el archivo…</p>
           )}
         </section>
       )}
@@ -128,7 +128,7 @@ export default function ImportarExcel({ onTerminar }: Props) {
                     <strong>{a.nombre}</strong>
                     {a.cambios.map((c, i) => (
                       <p key={i} className={css.cambio}>
-                        {c.etiqueta || etiquetaCampo(c.campo)}: <span className={css.antes}>{valorCambio(c.campo, c.antes)}</span> → <span className={css.despues}>{valorCambio(c.campo, c.despues)}</span>
+                        {c.etiqueta || etiquetaCampo(c.campo)}: <span className={css.antes}>{valorCambio(c.campo, c.antes)}</span>, ahora <span className={css.despues}>{valorCambio(c.campo, c.despues)}</span>
                       </p>
                     ))}
                   </li>
@@ -153,7 +153,7 @@ export default function ImportarExcel({ onTerminar }: Props) {
 
           <div className={css.accionesFin}>
             <button type="button" className={css.btn} onClick={aplicar} disabled={nada || ocupado}>
-              {fase.tipo === "aplicando" ? "Aplicando…" : "✅ Aplicar cambios"}
+              {fase.tipo === "aplicando" ? "Aplicando…" : "Aplicar cambios"}
             </button>
             <button
               type="button"
@@ -171,7 +171,7 @@ export default function ImportarExcel({ onTerminar }: Props) {
       {fase.tipo === "listo" && (
         <>
           <div className="aviso info" role="status">
-            ✅ Listo. Se crearon <strong>{fase.resumen.crear.length}</strong> y se actualizaron <strong>{fase.resumen.actualizar.length}</strong> trabajadoras.
+            Listo. Se crearon <strong>{fase.resumen.crear.length}</strong> y se actualizaron <strong>{fase.resumen.actualizar.length}</strong> trabajadoras.
             {fase.resumen.errores.length > 0 && <> {fase.resumen.errores.length} filas con problemas se saltaron.</>}
           </div>
           <Conteos r={fase.resumen} />

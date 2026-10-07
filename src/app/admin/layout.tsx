@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import AdminShell from "@/components/admin/AdminShell";
 
 export const metadata: Metadata = {
-  title: "Panel del supervisor · Cuentas de cobro HOMO",
+  title: "Panel del supervisor de cuentas de cobro HOMO",
   robots: { index: false, follow: false },
 };
 

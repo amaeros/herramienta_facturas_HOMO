@@ -38,7 +38,7 @@ export default function LoginAdmin({ aviso, onEntrar }: Props) {
 
   return (
     <div className={css.paginaAngosta} role="main">
-      <h1 className={css.h1}>Panel del supervisor</h1>
+      <h1 className={css.h1}>Entra al panel</h1>
       <p className={css.lead}>Escribe la contraseña de administrador para ver las cuentas de cobro.</p>
 
       {aviso && (
@@ -47,7 +47,7 @@ export default function LoginAdmin({ aviso, onEntrar }: Props) {
         </div>
       )}
 
-      <form className={css.tarjeta} onSubmit={enviar} noValidate>
+      <form onSubmit={enviar} noValidate>
         <div className={css.campo}>
           <label className={css.etiqueta} htmlFor="admin-clave">
             Contraseña

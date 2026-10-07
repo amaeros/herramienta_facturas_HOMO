@@ -1,0 +1,591 @@
+{
+  "id": "f8e1480e-ba43-446a-9dde-1a0f353af68c",
+  "prevId": "b2829f42-2896-43c5-8e7e-a6481c72d5d9",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.cargas": {
+      "name": "cargas",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "contrato_id": {
+          "name": "contrato_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mes": {
+          "name": "mes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fecha_inicio": {
+          "name": "fecha_inicio",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fecha_corte": {
+          "name": "fecha_corte",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "planilla_numero": {
+          "name": "planilla_numero",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "planilla_mes": {
+          "name": "planilla_mes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "ss_declarada": {
+          "name": "ss_declarada",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "adicionales": {
+          "name": "adicionales",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "dias_manual": {
+          "name": "dias_manual",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "motivo_novedad": {
+          "name": "motivo_novedad",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "doc_num": {
+          "name": "doc_num",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dias": {
+          "name": "dias",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "valor": {
+          "name": "valor",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "acumulado": {
+          "name": "acumulado",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "pct": {
+          "name": "pct",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "ss_esperada": {
+          "name": "ss_esperada",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "desglose": {
+          "name": "desglose",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "estado": {
+          "name": "estado",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mensaje": {
+          "name": "mensaje",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "lectura": {
+          "name": "lectura",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "archivo_planilla": {
+          "name": "archivo_planilla",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "observacion": {
+          "name": "observacion",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "contrato_snapshot": {
+          "name": "contrato_snapshot",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "aprobado": {
+          "name": "aprobado",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "creado": {
+          "name": "creado",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "actualizado": {
+          "name": "actualizado",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "cargas_contrato_id_contratos_id_fk": {
+          "name": "cargas_contrato_id_contratos_id_fk",
+          "tableFrom": "cargas",
+          "tableTo": "contratos",
+          "columnsFrom": [
+            "contrato_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "cargas_contrato_mes_uq": {
+          "name": "cargas_contrato_mes_uq",
+          "nullsNotDistinct": false,
+          "columns": [
+            "contrato_id",
+            "mes"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.contratos": {
+      "name": "contratos",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "nombre": {
+          "name": "nombre",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cedula": {
+          "name": "cedula",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "direccion": {
+          "name": "direccion",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "telefono": {
+          "name": "telefono",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "ciudad": {
+          "name": "ciudad",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "cargo": {
+          "name": "cargo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "numero_contrato": {
+          "name": "numero_contrato",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "objeto": {
+          "name": "objeto",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "linea": {
+          "name": "linea",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "inicio": {
+          "name": "inicio",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fin": {
+          "name": "fin",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "honorario": {
+          "name": "honorario",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "valor_total": {
+          "name": "valor_total",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "riesgo": {
+          "name": "riesgo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'I'"
+        },
+        "riesgo_nuevo": {
+          "name": "riesgo_nuevo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "riesgo_desde": {
+          "name": "riesgo_desde",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reviso_nombre": {
+          "name": "reviso_nombre",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "reviso_cargo": {
+          "name": "reviso_cargo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "activo": {
+          "name": "activo",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "correo": {
+          "name": "correo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.intentos_pin": {
+      "name": "intentos_pin",
+      "schema": "",
+      "columns": {
+        "clave": {
+          "name": "clave",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "fallos": {
+          "name": "fallos",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "ultimo_fallo": {
+          "name": "ultimo_fallo",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "bloqueado_hasta": {
+          "name": "bloqueado_hasta",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.lecturas": {
+      "name": "lecturas",
+      "schema": "",
+      "columns": {
+        "temp_id": {
+          "name": "temp_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "contrato_id": {
+          "name": "contrato_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "archivo": {
+          "name": "archivo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tipo": {
+          "name": "tipo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "lectura": {
+          "name": "lectura",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "leyo": {
+          "name": "leyo",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "creado": {
+          "name": "creado",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "lecturas_creado_idx": {
+          "name": "lecturas_creado_idx",
+          "columns": [
+            {
+              "expression": "creado",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "lecturas_contrato_id_contratos_id_fk": {
+          "name": "lecturas_contrato_id_contratos_id_fk",
+          "tableFrom": "lecturas",
+          "tableTo": "contratos",
+          "columnsFrom": [
+            "contrato_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.parametros": {
+      "name": "parametros",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "default": 1
+        },
+        "pct_ibc": {
+          "name": "pct_ibc",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "salud": {
+          "name": "salud",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pension": {
+          "name": "pension",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "smmlv": {
+          "name": "smmlv",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ibc_piso_mult": {
+          "name": "ibc_piso_mult",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ibc_techo_mult": {
+          "name": "ibc_techo_mult",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "arl": {
+          "name": "arl",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "enviar_correo": {
+          "name": "enviar_correo",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "correo_supervisor": {
+          "name": "correo_supervisor",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "tolerancia_ss": {
+          "name": "tolerancia_ss",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 100
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

@@ -26,6 +26,29 @@ export type AdicionalGuardada = {
   archivo: string;
 };
 
+/**
+ * Foto de los datos del contrato que usa la cuenta de cobro, tomada al enviarla.
+ * Así, un otrosí (el contrato se edita con nuevas fechas/valor) no cambia las cuentas ya enviadas.
+ */
+export type ContratoSnapshot = {
+  nombre: string;
+  cedula: string;
+  direccion: string;
+  telefono: string;
+  ciudad: string;
+  cargo: string;
+  numeroContrato: string;
+  objeto: string;
+  valorTotal: number;
+  honorario: number;
+  inicio: string;
+  fin: string;
+  /** Riesgo ARL vigente en el mes cobrado. */
+  riesgo: string;
+  revisoNombre: string;
+  revisoCargo: string;
+};
+
 /** Una sola fila (id = 1) con las reglas de seguridad social. */
 export const parametros = pgTable('parametros', {
   id: integer('id').primaryKey().default(1),
@@ -101,6 +124,8 @@ export const cargas = pgTable(
     /** Ruta (pathname) de la planilla principal en Blob. */
     archivoPlanilla: text('archivo_planilla').notNull().default(''),
     observacion: text('observacion').notNull().default(''),
+    /** Datos del contrato al momento de enviar (null en cuentas viejas: se usa el contrato actual). */
+    contratoSnapshot: jsonb('contrato_snapshot').$type<ContratoSnapshot>(),
     aprobado: boolean('aprobado').notNull().default(false),
     creado: timestamp('creado', { withTimezone: true }).notNull().defaultNow(),
     actualizado: timestamp('actualizado', { withTimezone: true }).notNull().defaultNow(),

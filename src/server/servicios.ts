@@ -34,6 +34,7 @@ import {
   parametros,
   type AdicionalGuardada,
   type ContratoFila,
+  type ContratoSnapshot,
   type Parametros,
 } from './db/schema';
 import {
@@ -389,10 +390,17 @@ async function planillaTemporal(deps: Deps, tempId: unknown, contratoId: number)
   return l;
 }
 
-/** Recalcula acumulado y % de TODAS las cargas de un contrato, en orden de mes. Solo escribe lo que cambió. */
+/**
+ * Recalcula acumulado y % de las cargas de un contrato que caen dentro del periodo vigente [inicio, fin],
+ * en orden de mes. Las cargas de meses fuera del periodo (de un otrosí anterior) no se tocan: conservan su historia.
+ * Solo escribe lo que cambió.
+ */
 export async function recalcularAcumulados(db: Db, c: ContratoFila): Promise<void> {
   const cc = contratoCalc(c);
-  const filas = await db.select().from(cargas).where(eq(cargas.contratoId, c.id)).orderBy(asc(cargas.mes));
+  const enPeriodo = new Set(monthsBetween(cc.inicio, cc.fin));
+  const filas = (await db.select().from(cargas).where(eq(cargas.contratoId, c.id)).orderBy(asc(cargas.mes))).filter((f) =>
+    enPeriodo.has(f.mes),
+  );
   const valores: Record<string, number> = {};
   for (const f of filas) valores[f.mes] = f.valor;
   for (const f of filas) {
@@ -403,6 +411,27 @@ export async function recalcularAcumulados(db: Db, c: ContratoFila): Promise<voi
       await db.update(cargas).set({ acumulado: a.acumulado, pct: a.pct }).where(eq(cargas.id, f.id));
     }
   }
+}
+
+/** Foto de los datos del contrato que usa la cuenta de cobro de `mes` (ver ContratoSnapshot). */
+export function snapshotDeContrato(c: ContratoFila, mes: string): ContratoSnapshot {
+  return {
+    nombre: c.nombre,
+    cedula: c.cedula,
+    direccion: c.direccion,
+    telefono: c.telefono,
+    ciudad: c.ciudad,
+    cargo: c.cargo,
+    numeroContrato: c.numeroContrato,
+    objeto: c.objeto,
+    valorTotal: c.valorTotal ?? 0,
+    honorario: c.honorario ?? 0,
+    inicio: c.inicio ?? '',
+    fin: c.fin ?? '',
+    riesgo: riskFor(contratoCalc(c), mes),
+    revisoNombre: c.revisoNombre,
+    revisoCargo: c.revisoCargo,
+  };
 }
 
 /** Guarda todo y deja lista la cuenta de cobro. La evaluación del servidor es la que manda. */
@@ -474,6 +503,7 @@ export async function enviar(deps: Deps, contratoId: number, p: PedidoEnviar): P
     mensaje: ev.mensaje,
     lectura,
     archivoPlanilla: lec.archivo,
+    contratoSnapshot: snapshotDeContrato(c, mes),
     aprobado: false,
     actualizado: ahora,
   };
@@ -521,7 +551,21 @@ export async function datosFactura(
   if (!r || (contratoId !== undefined && r.contrato.id !== contratoId)) {
     throw new ErrorAmable('No encontramos esa cuenta de cobro.', 404);
   }
-  const { carga: g, contrato: c } = r;
+  const { carga: g, contrato: actual } = r;
+  // Cuenta con foto del contrato (se toma al enviar): manda la foto. Cuenta vieja sin foto: contrato actual.
+  const c = g.contratoSnapshot ?? {
+    nombre: actual.nombre,
+    cedula: actual.cedula,
+    direccion: actual.direccion,
+    telefono: actual.telefono,
+    ciudad: actual.ciudad,
+    cargo: actual.cargo,
+    numeroContrato: actual.numeroContrato,
+    objeto: actual.objeto,
+    valorTotal: actual.valorTotal ?? 0,
+    revisoNombre: actual.revisoNombre,
+    revisoCargo: actual.revisoCargo,
+  };
   const datos: DatosFactura = {
     nombre: c.nombre,
     cedula: c.cedula,
@@ -544,5 +588,5 @@ export async function datosFactura(
     planillaMes: g.planillaMes,
     adicionales: (g.adicionales ?? []).map((a) => ({ numero: a.numero, mes: a.mes, valor: a.valor })),
   };
-  return { datos, contratoId: c.id };
+  return { datos, contratoId: actual.id };
 }

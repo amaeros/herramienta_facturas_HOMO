@@ -37,7 +37,8 @@ Valores por defecto de `parametros` = los de PARAMETROS de la hoja (ver `legacy/
 ## Archivos (Vercel Blob, `access: 'private'`)
 
 - Ruta: `planillas/<contratoId>/<AAAA-MM>/<uuid>-<nombre limpio>`. Nunca se devuelve la URL del blob a la contratista.
-- La factura .xlsx **no se guarda**: se genera al vuelo desde la fila de `cargas` (siempre coincide con los datos).
+- La factura .xlsx **no se guarda**: se genera al vuelo desde la fila de `cargas`. Los datos del contrato que usa la factura (nombre, cédula, n.º de contrato, objeto, valor total, riesgo vigente, etc.) se congelan al enviar en `cargas.contrato_snapshot` (jsonb), así un otrosí (editar `fin` y `valor_total` del contrato) no cambia las cuentas ya enviadas. Reenviar el mismo mes refresca la foto. Cuentas viejas sin foto (`null`) usan el contrato actual.
+- Otrosí = prórroga + adición del mismo contrato: el supervisor edita solo `fin` y `valor_total` (el inicio no cambia; el acumulado sigue sumando desde el inicio). `recalcularAcumulados` solo toca las cargas cuyo mes está dentro de [inicio, fin] vigente.
 - Límite: 4 MB por archivo (el cuerpo de una función de Vercel admite ~4,5 MB). Tipos: PDF, JPG, PNG (validar magic bytes).
 
 ## Respuestas

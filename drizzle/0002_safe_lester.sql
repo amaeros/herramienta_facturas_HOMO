@@ -1,0 +1,1 @@
+ALTER TABLE "cargas" ADD COLUMN "contrato_snapshot" jsonb;

@@ -181,6 +181,9 @@ export default function FormularioTrabajadora({ inicial, onGuardado, onCancelar 
           <p className={css.pista} style={{ marginTop: 0, marginBottom: 14 }}>
             Si faltan las fechas o el honorario, la trabajadora todavía no podrá entrar desde el celular.
           </p>
+          <p className={css.pista} style={{ marginTop: 0, marginBottom: 14 }}>
+            ¿Hay otrosí (prórroga o adición)? Cambia solo la fecha de fin y el valor total (valor inicial + adiciones). La fecha de inicio no cambia: el acumulado sigue sumando desde el inicio del contrato. Las cuentas de cobro ya enviadas no cambian.
+          </p>
         </fieldset>
 
         <fieldset className={css.grupo}>

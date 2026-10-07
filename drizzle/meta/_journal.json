@@ -15,6 +15,13 @@
       "when": 1791347172632,
       "tag": "0001_contratos_linea",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791349297093,
+      "tag": "0002_safe_lester",
+      "breakpoints": true
     }
   ]
 }

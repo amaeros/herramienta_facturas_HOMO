@@ -230,6 +230,10 @@ export async function generarFacturaXlsx(d: DatosFactura): Promise<Buffer> {
   ws.pageSetup.fitToHeight = 1;
   ws.pageSetup.orientation = 'portrait';
   ws.pageSetup.paperSize = 1 as ExcelJS.PaperSize; // Carta
+  // ExcelJS escribe <pageSetUpPr> ANTES de <outlinePr> dentro de <sheetPr>; el esquema pide lo contrario y Excel
+  // responde "Hemos encontrado un problema con el contenido". outlinePr solo trae los valores por defecto
+  // (resumen abajo y a la derecha), así que no se escribe y queda nada que ordenar.
+  delete (ws.properties as { outlineProperties?: unknown }).outlineProperties;
 
   wb.creator = 'Cuentas de cobro HOMO';
   wb.lastModifiedBy = 'Cuentas de cobro HOMO';

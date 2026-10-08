@@ -226,6 +226,23 @@ describe('casos de borde', () => {
   });
 });
 
+describe('compatibilidad con Excel', () => {
+  // Excel exige dentro de <sheetPr> el orden tabColor, outlinePr, pageSetUpPr. ExcelJS escribe pageSetUpPr antes
+  // de outlinePr y Excel pide "reparar" el archivo. Se valida con 0 y 3 adicionales.
+  for (const adicionales of [[], [...adic2, { numero: '3333333333', mes: '2026-06', valor: 9000 }]]) {
+    it(`sheetPr en el orden del esquema (${adicionales.length} adicionales)`, async () => {
+      const zip = await JSZip.loadAsync(await generarFacturaXlsx({ ...base, adicionales }));
+      const hoja = Object.keys(zip.files).find((n) => /^xl\/worksheets\/sheet\d+\.xml$/.test(n))!;
+      const xml = await zip.file(hoja)!.async('string');
+      const sheetPr = xml.match(/<sheetPr>[\s\S]*?<\/sheetPr>/)?.[0] ?? '';
+      const orden = [...sheetPr.matchAll(/<(tabColor|outlinePr|pageSetUpPr)\b/g)].map((m) => m[1]);
+      const esperado = ['tabColor', 'outlinePr', 'pageSetUpPr'].filter((t) => orden.includes(t));
+      expect(orden).toEqual(esperado);
+      expect(orden).toContain('pageSetUpPr'); // ajustar a 1 página sigue activo
+    });
+  }
+});
+
 describe('nombreArchivoFactura', () => {
   it('arma el nombre y quita caracteres prohibidos', () => {
     expect(nombreArchivoFactura('202609', 'PRUEBA PÉREZ DE LA TORRE')).toBe('202609 - PRUEBA PÉREZ DE LA TORRE - Cuenta de cobro.xlsx');

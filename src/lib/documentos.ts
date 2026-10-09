@@ -76,7 +76,8 @@ const FECHA_SRC = '(?<!\\d)(\\d ?\\d?) *de *(' + MES_SRC + ') *de *(2 ?0 ?\\d ?\
 /** Numero con puntos de miles ("1.001.370.879", "1001.370.879", "1001370879"); admite espacios sueltos. 1 grupo. */
 const NUM_ID_SRC = '(\\d{1,4}(?: ?[. ] ?\\d ?\\d ?\\d)+|\\d{6,11})';
 /** Monto con "$". 1 grupo. */
-const MONTO_SRC = '\\$ *(\\d{1,3}(?: ?[.,] ?\\d ?\\d ?\\d)+|\\d+)';
+// separadores de miles: punto, coma y también la tilde o el apóstrofo de millones ("$7´033.333", "$8’440.000")
+const MONTO_SRC = "\\$ *(\\d{1,3}(?: ?[.,´’'] ?\\d ?\\d ?\\d)+|\\d+)";
 /** Codigo de contrato: 2026CPS043, 2026CPSP018 (con espacios sueltos). Grupos: anio, P?, numero, 4to digito pegado */
 const CODIGO_SRC = '(?<![\\d])(2 ?0 ?\\d ?\\d) ?C ?P ?S ?(P ?)?(\\d ?\\d ?\\d)(\\d)?';
 
@@ -345,20 +346,45 @@ function leerContrato(t: Texto): DocumentoLeido {
   if (!m) m = new RegExp(L('valordelcontrato') + '[^$]{0,300}?' + MONTO_SRC, 'i').exec(plain);
   if (m) campos.valorTotal = monto(m[1]);
 
-  // honorario: FORMA DE PAGO ... "la suma de CUATRO MILLONES ... ($ 4.009.000)"
+  // honorario: FORMA DE PAGO ... "la suma de CUATRO MILLONES ... ($ 4.009.000)". Algunos contratos pagan meses
+  // distintos: "la suma de ($7´033.333) ... en el mes de octubre de 2026 y la suma de ($8’440.000) ... en el mes de
+  // noviembre": el honorario mensual es el del mes completo (el mayor) y el primero, si es menor, es un mes partido.
   const fp = new RegExp(L('formadepago'), 'ig');
   let fm: RegExpExecArray | null;
   while ((fm = fp.exec(plain)) !== null) {
-    const ventana = plain.substring(fm.index, fm.index + 900);
-    const hm = new RegExp(L('lasumade') + '[^$]{0,200}?' + MONTO_SRC, 'i').exec(ventana);
-    if (hm) { campos.honorario = monto(hm[1]); break; }
+    const ventana = plain.substring(fm.index, fm.index + 1500);
+    const re = new RegExp(L('lasumade') + '[^$]{0,200}?' + MONTO_SRC + '(?:[^$]{0,260}?' + L('enelmesde') + ' +([a-z]+) +(?:de +)?(\\d ?\\d ?\\d ?\\d))?', 'ig');
+    const pagos: Array<{ valor: number; mes?: number; anio?: number }> = [];
+    let pm: RegExpExecArray | null;
+    while ((pm = re.exec(ventana)) !== null) {
+      const v = monto(pm[1]);
+      if (v === undefined) continue;
+      const mes = pm[2] ? MESES[quitarTildes(pm[2]).toLowerCase()] : undefined;
+      pagos.push({ valor: v, mes, anio: pm[3] ? Number(soloDigitos(pm[3])) : undefined });
+    }
+    if (!pagos.length) continue;
+    const completo = Math.max(...pagos.map((p) => p.valor));
+    campos.honorario = completo;
+    if (pagos.length > 1 && pagos.some((p) => p.valor !== completo)) {
+      notas.push('El contrato paga valores distintos por mes; se tomó como honorario mensual el del mes completo.');
+      // primer pago menor = mes partido: los días salen del valor (mes de 30 días) y de ahí la fecha de inicio
+      const primero = pagos[0];
+      if (primero.valor < completo && primero.mes && primero.anio) {
+        const dias = Math.round((primero.valor / completo) * 30);
+        if (dias >= 1 && dias < 30) {
+          campos.inicio = isoFecha(30 - dias + 1, primero.mes, primero.anio);
+          notas.push(`La fecha de inicio se dedujo del primer pago (${dias} días del primer mes); confírmala con el acta de inicio o la póliza.`);
+        }
+      }
+    }
+    break;
   }
 
   // terminacion: "TERMINACION : Sin exceder el 30 de Septiembre de 2026."
   m = new RegExp(L('terminacion') + ' ?: ?(?:' + L('sinexceder') + ' *(?:el)? *)?' + FECHA_SRC, 'i').exec(plain);
   if (m) campos.fin = fechaDeGrupos(m[1], m[2], m[3]);
 
-  notas.push('El contrato no trae la fecha exacta de inicio (depende del acta de inicio).');
+  if (campos.inicio === undefined) notas.push('El contrato no trae la fecha exacta de inicio (depende del acta de inicio).');
   if (campos.valorTotal !== undefined) notas.push('El valor del contrato es el valor inicial; si hubo adiciones, el valor total sale del acta de prórroga o adición.');
   if (campos.fin === undefined) notas.push('No se encontró la fecha de terminación del contrato.');
   if (campos.honorario === undefined) notas.push('No se encontró el honorario mensual en la forma de pago.');

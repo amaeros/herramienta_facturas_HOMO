@@ -239,6 +239,31 @@ describe('leerDocumento: contrato con espacios raros y encabezado repetido', () 
   });
 });
 
+describe('leerDocumento: contrato con meses de pago distintos', () => {
+  // Contrato corto que empieza a mitad de mes: un pago partido y uno completo, con tilde/apóstrofo de millones.
+  const CORTO = CONTRATO
+    .replace('TERMINACION :  Sin exceder el 30 de  Septiembre de 202 6 .', 'TERMINACION: 30 de noviembre de 2026')
+    .replace('VALOR:  $ 36.081.000', 'VALOR: $15.473.333')
+    .replace(/pagará por los servicios recibidos durante los meses de enero a septiembre de 2026 la\nsuma de CUATRO MILLONES NUEVE MIL PESOS M\/L \(\$ 4\.009\.000\) , respectivamente,/,
+      'pagará la suma de ($7´033.333) SIETE MILLONES TREINTA Y TRES MIL PESOS MCTE en el mes de octubre de 2026 y la\nsuma de ( $8’440.000) OCHO MILLONES CUATROCIENTOS CUARENTA MIL PESOS MCTE , en el mes de noviembre de 2026 respectivamente,');
+
+  it('lee montos con tilde o apóstrofo de millones', () => {
+    expect(leerDocumento(CORTO).campos.valorTotal).toBe(15473333);
+  });
+  it('honorario = el del mes completo, no el del mes partido', () => {
+    const r = leerDocumento(CORTO);
+    expect(r.campos.honorario).toBe(8440000);
+    expect(r.notas.join(' ')).toMatch(/mes completo/);
+  });
+  it('deduce el inicio del pago partido (25 días de octubre -> 06/10) y avisa que hay que confirmarlo', () => {
+    const r = leerDocumento(CORTO);
+    expect(r.campos.inicio).toBe('2026-10-06');
+    expect(r.campos.fin).toBe('2026-11-30');
+    expect(r.notas.join(' ')).toMatch(/confírmala/);
+    expect(r.notas.join(' ')).not.toMatch(/no trae la fecha exacta de inicio/);
+  });
+});
+
 describe('leerDocumento: acta de prorroga o adicion (GJ-CO-FR-12)', () => {
   const r = leerDocumento(ACTA);
 

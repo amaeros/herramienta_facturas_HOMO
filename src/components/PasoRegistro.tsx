@@ -108,7 +108,7 @@ export default function PasoRegistro({ avisar, limpiarAviso, onVolver }: Props) 
           <h3>Tus datos</h3>
           {campo("nombre", "Nombre completo", { autoComplete: "name" })}
           {campo("cedula", "Cédula", { autoComplete: "off", ayuda: "Solo números, sin puntos." })}
-          {campo("cargo", "Tu cargo", { ayuda: "El de tu contrato, por ejemplo: Profesional universitaria o Apoyo técnico. Sale en tu cuenta de cobro debajo de tu nombre." })}
+          {campo("cargo", "Tu cargo", { autoComplete: "organization-title", ayuda: "El de tu contrato, por ejemplo: Profesional universitaria o Apoyo técnico. Sale en tu cuenta de cobro debajo de tu nombre." })}
           {campo("direccion", "Dirección", { autoComplete: "street-address" })}
           {campo("telefono", "Teléfono", { tipo: "tel", autoComplete: "tel" })}
           {campo("ciudad", "Ciudad", { autoComplete: "address-level2" })}

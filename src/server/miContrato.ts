@@ -11,8 +11,10 @@ import { expectedTotal, fmtMoney, parseYMD } from '../lib/calc';
 import { CAMPOS_CONTRATISTA, diferencias, registrarCambios, type CampoContratista } from './cambios';
 import { contratos, type ContratoFila } from './db/schema';
 import {
+  cargoEsElNombre,
   CORREO_RE,
   MAX_ENTERO,
+  MENSAJE_CARGO_ES_NOMBRE,
   MENSAJE_CORREO,
   MENSAJE_FECHA_CONTRATO,
   MENSAJE_FIN_ANTES_DE_INICIO,
@@ -124,6 +126,11 @@ export async function guardarMiContrato(
     else if (texto === '' && t.obligatorio) err[k] = t.pide;
     else if (texto.length > t.max) err[k] = `${t.etiqueta} es demasiado largo (máximo ${t.max} caracteres).`;
     else nuevos[k] = texto;
+  }
+
+  if (typeof nuevos.cargo === 'string' && cargoEsElNombre(nuevos.cargo, actual.nombre)) {
+    delete nuevos.cargo;
+    err.cargo = MENSAJE_CARGO_ES_NOMBRE;
   }
 
   if ('telefono' in entrada) {

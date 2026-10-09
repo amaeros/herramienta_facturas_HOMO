@@ -62,7 +62,7 @@ describe('generarFacturaXlsx sin adicionales', () => {
   it('llena las celdas clave', async () => {
     const ws = (await leer(buf0)).getWorksheet('FACTURA')!;
     expect(ws.getCell('B8').value).toBe('PRUEBA PÉREZ DE LA TORRE');
-    expect(ws.getCell('B10').value).toBe(1000000001);
+    expect(ws.getCell('B10').value).toBe('1.000.000.001'); // la cédula siempre con puntos
     expect(ws.getCell('B12').value).toBe('Calle 1 # 2-3 Apto 4');
     expect(ws.getCell('B14').value).toBe(3000000000);
     expect(ws.getCell('B16').value).toBe('Medellín');
@@ -241,6 +241,22 @@ describe('compatibilidad con Excel', () => {
       expect(orden).toContain('pageSetUpPr'); // ajustar a 1 página sigue activo
     });
   }
+});
+
+describe('sin resaltados de la hoja de trabajo', () => {
+  it('no deja rellenos lila ni verde (tampoco en las filas adicionales) ni formatos condicionales', async () => {
+    for (const adicionales of [[], adic2]) {
+      const ws = (await leer(await generarFacturaXlsx({ ...base, adicionales }))).getWorksheet('FACTURA')!;
+      const pintadas: string[] = [];
+      ws.eachRow({ includeEmpty: true }, (row) => row.eachCell({ includeEmpty: true }, (c) => {
+        const f = c.fill as ExcelJS.FillPattern | undefined;
+        const argb = f?.type === 'pattern' ? f.fgColor?.argb?.toUpperCase() : undefined;
+        if (argb === 'FFCCCCFF' || argb === 'FF00FF00') pintadas.push(c.address);
+      }));
+      expect(pintadas).toEqual([]);
+      expect((ws as unknown as { conditionalFormattings: unknown[] }).conditionalFormattings ?? []).toHaveLength(0);
+    }
+  });
 });
 
 describe('nombreArchivoFactura', () => {

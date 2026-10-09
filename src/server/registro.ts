@@ -8,6 +8,7 @@ import { validarContrato } from './admin';
 import { registrarCambios } from './cambios';
 import type { Db } from './db';
 import { contratos, intentosPin } from './db/schema';
+import { cargoEsElNombre, MENSAJE_CARGO_ES_NOMBRE } from './entrada';
 import { ErrorAmable, ErrorValidacion } from './errores';
 import type { Deps } from './servicios';
 
@@ -103,6 +104,7 @@ export function validarRegistro(entrada: Record<string, unknown>, existentes: Ar
   for (const [k, max, etiqueta] of MAXIMOS) {
     if (!err[k] && String(e[k]).length > max) err[k] = `${etiqueta} es demasiado largo (máximo ${max} caracteres).`;
   }
+  if (!err.cargo && cargoEsElNombre(e.cargo, e.nombre)) err.cargo = MENSAJE_CARGO_ES_NOMBRE;
   if (!err.telefono) {
     const t = String(e.telefono);
     if (!/^[\d\s+]+$/.test(t) || !/^\d{7,15}$/.test(t.replace(/[\s+]/g, ''))) err.telefono = MENSAJE_TELEFONO;

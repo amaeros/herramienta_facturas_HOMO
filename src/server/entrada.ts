@@ -26,6 +26,17 @@ export function normTxt(s: unknown): string {
     .trim();
 }
 
+/**
+ * ¿Escribió su nombre en el campo del cargo? (pasa con el autocompletar del celular). Cierto si todas las palabras
+ * del cargo, con al menos dos, están en el nombre: "ANDREA MARTINEZ" contra "Andrea Martínez Angulo".
+ */
+export function cargoEsElNombre(cargo: unknown, nombre: unknown): boolean {
+  const pc = normTxt(cargo).split(' ').filter(Boolean);
+  const pn = new Set(normTxt(nombre).split(' ').filter(Boolean));
+  return pc.length >= 2 && pc.every((p) => pn.has(p));
+}
+export const MENSAJE_CARGO_ES_NOMBRE = 'Aquí va tu cargo (por ejemplo, Apoyo técnico o Profesional universitaria), no tu nombre.';
+
 /** Monto en pesos escrito por una persona: "358.700", "$ 358,700", 358700 -> 358700; null si no es un número. */
 export function monto(v: unknown): number | null {
   if (v === null || v === undefined || v === '') return null;

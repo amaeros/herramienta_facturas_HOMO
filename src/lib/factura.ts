@@ -100,6 +100,23 @@ function nombreProyecto(nombre: string): string {
   return s;
 }
 
+/**
+ * La plantilla viene de la hoja de Google, que resaltaba las casillas por llenar: lila (FFCCCCFF) en los datos de la
+ * contratista, verde (FF00FF00) en la seguridad social (y en las filas de planillas adicionales, que copian la 28), y
+ * formatos condicionales que pintaban de verde las casillas en 0 o vacías. En la cuenta de cobro final no van.
+ */
+const RELLENOS_DE_TRABAJO = new Set(['FFCCCCFF', 'FF00FF00']);
+function quitarResaltadosDeTrabajo(ws: ExcelJS.Worksheet) {
+  ws.eachRow({ includeEmpty: true }, (row) => {
+    row.eachCell({ includeEmpty: true }, (cell) => {
+      const f = cell.fill as ExcelJS.FillPattern | undefined;
+      const argb = f?.type === 'pattern' ? f.fgColor?.argb?.toUpperCase() : undefined;
+      if (argb && RELLENOS_DE_TRABAJO.has(argb)) cell.fill = { type: 'pattern', pattern: 'none' };
+    });
+  });
+  (ws as unknown as { conditionalFormattings: unknown[] }).conditionalFormattings = [];
+}
+
 function cedulaConPuntos(cedula: string): string {
   const limpia = String(cedula ?? '').trim();
   return /^\d+$/.test(limpia) ? limpia.replace(/\B(?=(\d{3})+(?!\d))/g, '.') : limpia;
@@ -184,7 +201,7 @@ export async function generarFacturaXlsx(d: DatosFactura): Promise<Buffer> {
 
   // Encabezado: contratista
   ws.getCell('B8').value = d.nombre;
-  ws.getCell('B10').value = numeroOTexto(cedulaTxt);
+  ws.getCell('B10').value = cedulaConPuntos(cedulaTxt); // siempre con puntos: 1.001.234.567
   ws.getCell('B12').value = d.direccion;
   ws.getCell('B14').value = numeroOTexto(d.telefono);
   ws.getCell('B16').value = d.ciudad;
@@ -234,6 +251,8 @@ export async function generarFacturaXlsx(d: DatosFactura): Promise<Buffer> {
   // responde "Hemos encontrado un problema con el contenido". outlinePr solo trae los valores por defecto
   // (resumen abajo y a la derecha), así que no se escribe y queda nada que ordenar.
   delete (ws.properties as { outlineProperties?: unknown }).outlineProperties;
+
+  quitarResaltadosDeTrabajo(ws);
 
   wb.creator = 'Cuentas de cobro HOMO';
   wb.lastModifiedBy = 'Cuentas de cobro HOMO';

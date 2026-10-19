@@ -100,6 +100,12 @@ function nombreProyecto(nombre: string): string {
   return s;
 }
 
+/** Cargo con solo la primera letra en mayúscula ("APOYO TÉCNICO" -> "Apoyo técnico"), como lo escriba cada quien. */
+function cargoFormato(cargo: string): string {
+  const s = String(cargo ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 /**
  * La plantilla viene de la hoja de Google, que resaltaba las casillas por llenar: lila (FFCCCCFF) en los datos de la
  * contratista, verde (FF00FF00) en la seguridad social (y en las filas de planillas adicionales, que copian la 28), y
@@ -234,11 +240,12 @@ export async function generarFacturaXlsx(d: DatosFactura): Promise<Buffer> {
   ws.getCell('B' + desplazar(38)).value = d.nombre;
   ws.getCell('B' + desplazar(39)).value = 'C.C: ' + cedulaConPuntos(cedulaTxt);
   ws.getCell('C' + desplazar(42)).value = nombreProyecto(d.nombre);
-  ws.getCell('G' + desplazar(42)).value = d.cargo;
+  // bloque Proyectó / Revisó: mismo estilo en las 4 casillas, sin importar cómo lo escribió cada persona
+  ws.getCell('G' + desplazar(42)).value = cargoFormato(d.cargo);
   ws.getCell('M' + desplazar(42)).value = fechaCorteTexto;
   ws.getCell('M' + desplazar(43)).value = fechaCorteTexto;
-  ws.getCell('C' + desplazar(43)).value = d.revisoNombre;
-  ws.getCell('G' + desplazar(43)).value = d.revisoCargo;
+  ws.getCell('C' + desplazar(43)).value = nombreProyecto(d.revisoNombre ?? '');
+  ws.getCell('G' + desplazar(43)).value = cargoFormato(d.revisoCargo);
 
   // Impresión: A1:N{última}, una página. ExcelJS antepone "$" a cada extremo, por eso "A$1".
   ws.pageSetup.printArea = 'A$1:N$' + (ULTIMA_FILA + n);

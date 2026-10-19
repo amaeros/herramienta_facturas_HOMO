@@ -87,11 +87,11 @@ describe('generarFacturaXlsx sin adicionales', () => {
     expect(ws.getCell('B38').value).toBe('PRUEBA PÉREZ DE LA TORRE');
     expect(ws.getCell('B39').value).toBe('C.C: 1.000.000.001');
     expect(ws.getCell('C42').value).toBe('Prueba Pérez de la Torre');
-    expect(ws.getCell('G42').value).toBe('Profesional Universitaria');
+    expect(ws.getCell('G42').value).toBe('Profesional universitaria');
     expect(ws.getCell('M42').value).toBe('30 de septiembre de 2026');
     expect(ws.getCell('M43').value).toBe('30 de septiembre de 2026');
     expect(ws.getCell('C43').value).toBe('Revisora de Prueba');
-    expect(ws.getCell('G43').value).toBe('Apoyo Técnico');
+    expect(ws.getCell('G43').value).toBe('Apoyo técnico');
   });
 
   it('conserva texto fijo, área de impresión, una sola hoja y las 2 imágenes', async () => {
@@ -181,11 +181,11 @@ describe('generarFacturaXlsx con 2 adicionales', () => {
     expect(ws.getCell('B40').value).toBe('PRUEBA PÉREZ DE LA TORRE');
     expect(ws.getCell('B41').value).toBe('C.C: 1.000.000.001');
     expect(ws.getCell('C44').value).toBe('Prueba Pérez de la Torre');
-    expect(ws.getCell('G44').value).toBe('Profesional Universitaria');
+    expect(ws.getCell('G44').value).toBe('Profesional universitaria');
     expect(ws.getCell('M44').value).toBe('30 de septiembre de 2026');
     expect(ws.getCell('M45').value).toBe('30 de septiembre de 2026');
     expect(ws.getCell('C45').value).toBe('Revisora de Prueba');
-    expect(ws.getCell('G45').value).toBe('Apoyo Técnico');
+    expect(ws.getCell('G45').value).toBe('Apoyo técnico');
     // las celdas viejas ya no tienen el pie
     expect(ws.getCell('B38').value).toBe('Este documento se asimila para todos sus efectos a un titulo valor según art- 772 del COdigo de Comercio');
     expect(ws.getCell('C42').value).toBeNull();
@@ -256,6 +256,20 @@ describe('sin resaltados de la hoja de trabajo', () => {
       expect(pintadas).toEqual([]);
       expect((ws as unknown as { conditionalFormattings: unknown[] }).conditionalFormattings ?? []).toHaveLength(0);
     }
+  });
+});
+
+describe('bloque Proyectó / Revisó con un solo estilo', () => {
+  it('nombres con mayúscula inicial y cargos con solo la primera letra, aunque vengan en MAYÚSCULAS', async () => {
+    const buf = await generarFacturaXlsx({
+      ...base, nombre: 'MARÍA CAMILA PRUEBA DE LA ROSA', cargo: 'PROFESIONAL',
+      revisoNombre: 'REVISORA MARTÍNEZ ANGULO', revisoCargo: 'APOYO TÉCNICO',
+    });
+    const ws = (await leer(buf)).getWorksheet('FACTURA')!;
+    expect(ws.getCell('C42').value).toBe('María Camila Prueba de la Rosa');
+    expect(ws.getCell('G42').value).toBe('Profesional');
+    expect(ws.getCell('C43').value).toBe('Revisora Martínez Angulo');
+    expect(ws.getCell('G43').value).toBe('Apoyo técnico');
   });
 });
 

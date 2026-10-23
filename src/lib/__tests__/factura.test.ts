@@ -69,8 +69,8 @@ describe('generarFacturaXlsx sin adicionales', () => {
     expect(ws.getCell('H8').value).toBe(202609);
     expect(ws.getCell('H11').value).toBe('30 de septiembre de 2026');
     expect(ws.getCell('H14').value).toBe('2026CPSP999');
-    expect((ws.getCell('G21').value as Date).toISOString().slice(0, 10)).toBe('2026-09-01');
-    expect((ws.getCell('L21').value as Date).toISOString().slice(0, 10)).toBe('2026-09-30');
+    expect(ws.getCell('G21').value).toBe('01 de septiembre de 2026'); // todas las fechas escritas
+    expect(ws.getCell('L21').value).toBe('30 de septiembre de 2026');
     expect(ws.getCell('G22').value).toBe(7174000);
     expect(ws.getCell('L22').value).toBe(64566000);
     expect(ws.getCell('L25').value).toBe(64566000);
@@ -273,9 +273,62 @@ describe('bloque Proyectó / Revisó con un solo estilo', () => {
   });
 });
 
+describe('objeto largo', () => {
+  const LARGO = 'Prestación de servicios como Profesional sin experiencia, en el marco de la ejecución del contrato '
+    + 'interadministrativo N° 4600018487 de 2025, suscrito con la Secretaría de las Mujeres del Departamento de Antioquia, '
+    + 'cuyo objeto es: “FORTALECER ACCIONES DE LA POLÍTICA PÚBLICA DE LAS MUJERES DESDE UN ENFOQUE SICOSOCIAL PARA LA '
+    + 'GARANTÍA DE SUS DERECHOS HUMANOS, EL FORTALECIMIENTO DE SU AUTONOMÍA ECONÓMICA Y EL DERECHO A VIVIR UNA VIDA LIBRE '
+    + 'DE VIOLENCIAS.”';
+  it('un objeto corto deja la fila como en la plantilla', async () => {
+    const ws = (await leer(buf0)).getWorksheet('FACTURA')!;
+    expect(ws.getRow(25).height).toBe(88.5);
+  });
+  it('un objeto largo (~455 caracteres, como los reales) sigue en letra 10 y la fila crece con 1 línea de holgura', async () => {
+    const ws = (await leer(await generarFacturaXlsx({ ...base, objeto: LARGO }))).getWorksheet('FACTURA')!;
+    // Excel mide 79,8 pt (6 líneas) con los anchos del formato oficial: la fila deja al menos una línea de sobra
+    expect(ws.getRow(25).height).toBeGreaterThanOrEqual(79.8 + 13.2);
+    expect(ws.getRow(25).height).toBeLessThanOrEqual(110); // parecido al 105 del formato que usan
+    expect(ws.getCell('B25').font?.size ?? 10).toBe(10);
+    expect(ws.getCell('B25').value).toBe(LARGO);
+    expect(ws.pageSetup.fitToPage).toBe(true);
+    expect(ws.pageSetup.fitToHeight).toBe(1);
+  });
+  it('los saltos de línea pegados desde el PDF se vuelven espacios y no gastan renglones', async () => {
+    const conSaltos = LARGO.replace(/ (?=[A-ZÁÉÍÓÚ]{4,})/g, '\n');
+    const limpio = (await leer(await generarFacturaXlsx({ ...base, objeto: LARGO }))).getWorksheet('FACTURA')!;
+    const ws = (await leer(await generarFacturaXlsx({ ...base, objeto: conSaltos }))).getWorksheet('FACTURA')!;
+    expect(ws.getCell('B25').value).toBe(LARGO);
+    expect(ws.getRow(25).height).toBe(limpio.getRow(25).height);
+  });
+  it('un objeto enorme agranda más la fila, sin achicar la letra', async () => {
+    const ws = (await leer(await generarFacturaXlsx({ ...base, objeto: LARGO + ' ' + LARGO }))).getWorksheet('FACTURA')!;
+    expect(ws.getCell('B25').font?.size ?? 10).toBe(10);
+    expect(ws.getRow(25).height).toBeGreaterThan(160);
+  });
+});
+
 describe('nombreArchivoFactura', () => {
   it('arma el nombre y quita caracteres prohibidos', () => {
     expect(nombreArchivoFactura('202609', 'PRUEBA PÉREZ DE LA TORRE')).toBe('202609 - PRUEBA PÉREZ DE LA TORRE - Cuenta de cobro.xlsx');
     expect(nombreArchivoFactura('202609', 'A/B\\C:D*E?F"G<H>I|J#K%L')).toBe('202609 - ABCDEFGHIJKL - Cuenta de cobro.xlsx');
+  });
+});
+
+describe('impresión segura', () => {
+  it('márgenes que cualquier impresora alcanza (>= 0,25") y la hoja centrada', async () => {
+    const ws = (await leer(buf0)).getWorksheet('FACTURA')!;
+    const m = ws.pageSetup.margins!;
+    for (const lado of ['left', 'right', 'top', 'bottom'] as const) expect(m[lado]).toBeGreaterThanOrEqual(0.25);
+    expect(ws.pageSetup.horizontalCentered).toBe(true);
+    expect(ws.pageSetup.fitToPage).toBe(true);
+  });
+});
+
+describe('como el formato que usan las contratistas', () => {
+  it('columnas F y G con los anchos del formato oficial y firma en letra 8', async () => {
+    const ws = (await leer(buf0)).getWorksheet('FACTURA')!;
+    expect(ws.getColumn('F').width).toBeCloseTo(9.8, 1);
+    expect(ws.getColumn('G').width).toBeCloseTo(21.3, 1);
+    expect(ws.getCell('B38').font?.size).toBe(8);
   });
 });

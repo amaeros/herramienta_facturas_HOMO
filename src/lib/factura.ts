@@ -73,11 +73,6 @@ function partesFecha(iso: string): { y: number; m: number; d: number } {
   return { y: Number(r[1]), m: Number(r[2]), d: Number(r[3]) };
 }
 
-function fechaExcel(iso: string): Date {
-  const { y, m, d } = partesFecha(iso);
-  return new Date(Date.UTC(y, m - 1, d));
-}
-
 /** "DD de mes de AAAA" con el mes en minúscula, como en la plantilla original. */
 function fechaTexto(iso: string): string {
   const { y, m, d } = partesFecha(iso);
@@ -98,6 +93,48 @@ function nombreProyecto(nombre: string): string {
   let s = nombre.toLowerCase().replace(/(^|[^\p{L}])(\p{L})/gu, (_t, a: string, b: string) => a + b.toUpperCase());
   for (const [de, a] of [[' De ', ' de '], [' Del ', ' del '], [' La ', ' la '], [' Y ', ' y ']]) s = s.split(de).join(a);
   return s;
+}
+
+/**
+ * El objeto va en B25:J25 (combinadas, Arial 10, con ajuste de texto) y la fila mide 88,5 pt. Excel no agranda solo
+ * una fila de celdas combinadas, así que un objeto largo se cortaba al imprimir. Como en el formato que usan las
+ * contratistas, la letra se queda en 10 y la fila crece lo necesario MÁS una línea de holgura (otros programas miden
+ * la letra un poco distinto). La hoja está en "ajustar a 1 página", así que no se parte.
+ */
+const ALTO_OBJETO_PLANTILLA = 88.5;
+function lineasEnvueltas(texto: string, porLinea: number): number {
+  let lineas = 0;
+  for (const parrafo of String(texto ?? '').split(/\r?\n/)) {
+    let actual = 0;
+    let usadas = 1;
+    for (const palabra of parrafo.split(/\s+/).filter(Boolean)) {
+      const largo = palabra.length;
+      if (actual === 0) actual = largo;
+      else if (actual + 1 + largo <= porLinea) actual += 1 + largo;
+      else { usadas++; actual = largo; }
+      while (actual > porLinea) { usadas++; actual -= porLinea; } // palabra más larga que la línea
+    }
+    lineas += usadas;
+  }
+  return lineas;
+}
+// Arial 10 en B25:J25 con los anchos del formato oficial (419 pt): calibrado con Excel (Autoajustar) sobre los objetos
+// reales, ~455 caracteres dan 6 líneas de 13,2 pt (79,8 pt). Se cuentan 74 caracteres por línea para quedar del lado
+// seguro (sale 1 línea de más, nunca de menos).
+const OBJETO_POR_LINEA = 74;
+const OBJETO_ALTO_LINEA = 13.2;
+/** El objeto es un solo párrafo: los saltos de línea pegados desde el PDF solo gastaban renglones. */
+export function objetoLimpio(objeto: string): string {
+  return String(objeto ?? '').replace(/\s+/g, ' ').trim();
+}
+/** Alto de la fila del objeto: el del formato (88,5) o, si no cabe, lo necesario + 1 línea de holgura. Letra 10. */
+export function medidaObjeto(objeto: string): { tamano: number; alto: number } {
+  const necesario = lineasEnvueltas(objetoLimpio(objeto), OBJETO_POR_LINEA) * OBJETO_ALTO_LINEA;
+  const conHolgura = necesario + OBJETO_ALTO_LINEA + 2;
+  return { tamano: 10, alto: Math.max(ALTO_OBJETO_PLANTILLA, Math.ceil(conHolgura)) };
+}
+function ajustarAltoObjeto(ws: ExcelJS.Worksheet, objeto: string) {
+  ws.getRow(25).height = medidaObjeto(objeto).alto;
 }
 
 /** Cargo con solo la primera letra en mayúscula ("APOYO TÉCNICO" -> "Apoyo técnico"), como lo escriba cada quien. */
@@ -199,6 +236,11 @@ export async function generarFacturaXlsx(d: DatosFactura): Promise<Buffer> {
   const ws = wb.getWorksheet('FACTURA');
   if (!ws) throw new Error('La plantilla no tiene la hoja FACTURA');
 
+  // Anchos del formato oficial que usan las contratistas (la plantilla de Google tenía F y G más angostas): con G de
+  // 21,3 las fechas escritas del periodo caben y el objeto (B:J) gana ancho.
+  ws.getColumn('F').width = 9.8;
+  ws.getColumn('G').width = 21.3;
+
   if (n > 0) insertarFilasPlanilla(ws, n);
   const desplazar = (fila: number) => (fila > FILA_PLANILLA ? fila + n : fila);
 
@@ -216,11 +258,13 @@ export async function generarFacturaXlsx(d: DatosFactura): Promise<Buffer> {
   ws.getCell('H11').value = fechaCorteTexto;
   ws.getCell('H14').value = d.numeroContrato;
   // Periodo y valores
-  ws.getCell('G21').value = fechaExcel(d.fechaInicio);
-  ws.getCell('L21').value = fechaExcel(d.fechaCorte);
+  // todas las fechas de la cuenta, escritas ("01 de octubre de 2026"), como el formato que usan las contratistas
+  ws.getCell('G21').value = fechaTexto(d.fechaInicio);
+  ws.getCell('L21').value = fechaTexto(d.fechaCorte);
   ws.getCell('G22').value = d.valorPeriodo;
   ws.getCell('L22').value = d.acumulado;
-  ws.getCell('B25').value = d.objeto;
+  ws.getCell('B25').value = objetoLimpio(d.objeto);
+  ajustarAltoObjeto(ws, d.objeto);
   ws.getCell('L25').value = d.valorTotalContrato;
   ws.getCell('K25').value = d.valorTotalContrato === 0 ? 0 : d.acumulado / d.valorTotalContrato;
   // Planilla principal
@@ -237,7 +281,9 @@ export async function generarFacturaXlsx(d: DatosFactura): Promise<Buffer> {
     ws.getCell('L' + r).value = nombreMes(p.mes);
   });
   // Pie de página
-  ws.getCell('B' + desplazar(38)).value = d.nombre;
+  const firma = ws.getCell('B' + desplazar(38));
+  firma.value = d.nombre;
+  firma.font = { ...(firma.font ?? {}), size: 8 }; // como el formato que usan: los nombres largos no se salen
   ws.getCell('B' + desplazar(39)).value = 'C.C: ' + cedulaConPuntos(cedulaTxt);
   ws.getCell('C' + desplazar(42)).value = nombreProyecto(d.nombre);
   // bloque Proyectó / Revisó: mismo estilo en las 4 casillas, sin importar cómo lo escribió cada persona
@@ -254,6 +300,10 @@ export async function generarFacturaXlsx(d: DatosFactura): Promise<Buffer> {
   ws.pageSetup.fitToHeight = 1;
   ws.pageSetup.orientation = 'portrait';
   ws.pageSetup.paperSize = 1 as ExcelJS.PaperSize; // Carta
+  // La plantilla traía margen derecho de 1 mm: casi ninguna impresora llega ahí y cortaba el borde derecho.
+  // Márgenes de ~6 mm (lo que imprime cualquier impresora) y la hoja centrada.
+  ws.pageSetup.margins = { left: 0.25, right: 0.25, top: 0.3, bottom: 0.3, header: 0.1, footer: 0.1 };
+  ws.pageSetup.horizontalCentered = true;
   // ExcelJS escribe <pageSetUpPr> ANTES de <outlinePr> dentro de <sheetPr>; el esquema pide lo contrario y Excel
   // responde "Hemos encontrado un problema con el contenido". outlinePr solo trae los valores por defecto
   // (resumen abajo y a la derecha), así que no se escribe y queda nada que ordenar.

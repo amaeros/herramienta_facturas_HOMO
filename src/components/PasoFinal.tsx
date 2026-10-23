@@ -13,7 +13,20 @@ interface Props {
   onSalir: () => void;
 }
 
-/** Paso 4: la hoja completa con su sello, el resultado del envío y la descarga del Excel (el link es del mismo sitio y responde con el .xlsx). */
+/** Enlace del PDF: es el mismo de la factura con `?formato=pdf`. */
+export function urlPdf(url: string): string {
+  return url + (url.includes("?") ? "&" : "?") + "formato=pdf";
+}
+
+/** El nombre del Excel cambiado a .pdf, para el atributo download. */
+export function nombrePdf(nombre: string | undefined): string | undefined {
+  return nombre ? nombre.replace(/[.]xlsx$/i, ".pdf") : undefined;
+}
+
+/**
+ * Paso 4: la hoja completa con su sello, el resultado del envío y la descarga de la cuenta de cobro: el PDF para
+ * imprimir (sale igual en cualquier computador) y el Excel. Los enlaces son del mismo sitio.
+ */
 export default function PasoFinal({ resp: r, hoja, ocupado, onOtroMes, onSalir }: Props) {
   const factura = r.factura && r.factura.url ? r.factura : null;
   const clase = claseEstado(r.estado);
@@ -52,7 +65,7 @@ export default function PasoFinal({ resp: r, hoja, ocupado, onOtroMes, onSalir }
         </div>
       ) : (
         <div className="aviso info">
-          No pudimos crear la cuenta de cobro (Excel) en este momento. Tu envío quedó registrado y tu supervisor puede generarla desde su panel.
+          No pudimos crear la cuenta de cobro en este momento. Tu envío quedó registrado y tu supervisor puede generarla desde su panel.
         </div>
       )}
 
@@ -67,9 +80,15 @@ export default function PasoFinal({ resp: r, hoja, ocupado, onOtroMes, onSalir }
 
       <div className="barra-fija">
         {factura ? (
-          <a className="btn" href={factura.url} download={factura.nombre || undefined}>
-            Descargar Excel
-          </a>
+          <>
+            <p className="ayuda">Para imprimir usa el PDF: sale igual en cualquier computador.</p>
+            <a className="btn" href={urlPdf(factura.url)} download={nombrePdf(factura.nombre)}>
+              Descargar para imprimir (PDF)
+            </a>
+            <a className="btn sec" href={factura.url} download={factura.nombre || undefined}>
+              Descargar Excel
+            </a>
+          </>
         ) : (
           <button type="button" className="btn" disabled={ocupado} onClick={onOtroMes}>
             Enviar otro mes

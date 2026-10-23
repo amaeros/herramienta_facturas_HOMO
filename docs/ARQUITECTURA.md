@@ -6,7 +6,7 @@ El comportamiento replica la versión Apps Script v3.1 (`legacy/apps-script/Code
 ## Capas
 
 ```
-src/lib/        lógica pura, sin I/O: calc.ts, parser.ts, pdfText.ts, factura.ts   (YA EXISTEN, no reescribir)
+src/lib/        lógica pura, sin I/O: calc.ts, parser.ts, pdfText.ts, factura.ts, facturaPdf.ts   (YA EXISTEN, no reescribir)
 src/server/     I/O del servidor: db (drizzle), auth (sesiones, PIN), blob, servicios
 src/app/api/    route handlers delgados: validan entrada → llaman a src/server → responden JSON
 src/app/        pantallas: / (contratista, celular) · /admin (fase 3)
@@ -65,7 +65,7 @@ Todas: `{ok:true, ...}` o `{ok:false, error:'mensaje amable en español'}`. Erro
 | `POST /api/evaluar` | `{mes, fechaInicio, fechaCorte, datos:{numero, periodo, salud, pension, arl}, adicionales:[{numero, periodo, valor, tempId}], diasManual:{dias, motivo}\|null}` | `evaluacion` (= `Calc.evaluate`) — no guarda nada |
 | `POST /api/planilla` | multipart: `archivo` (File), `texto` (texto que extrajo pdf.js en el navegador, puede venir vacío), `mes`, `fechaInicio`, `fechaCorte`, `adicionales` (JSON), `diasManual` (JSON), `adicional` ('1' si es planilla adicional) | `tempId, leyo, confianza, tipoDoc, fuente:'navegador'\|'ninguna', notas[], lectura:{numero, periodo, salud, pension, arl}, evaluacion\|null, valor\|null` |
 | `POST /api/enviar` | `{mes, fechaInicio, fechaCorte, datos, tempId, adicionales, diasManual}` | `estado, estadoTexto, emoji, mensaje, factura:{nombre, url}` (url = `/api/factura/<cargaId>`) |
-| `GET /api/factura/[id]` | cookie de la contratista dueña (o admin) | el .xlsx (`Content-Disposition: attachment`) |
+| `GET /api/factura/[id]` | cookie de la contratista dueña (o admin). Query opcional `formato=xlsx` (por defecto) o `pdf` | el .xlsx, o con `?formato=pdf` el PDF de una página carta para imprimir (fuentes en `src/assets/fuentes`). Siempre `Content-Disposition: attachment` |
 
 `Resumen` = `{nombre, numeroContrato, honorario, inicio, fin, riesgo, meses:[{key, label, inicio, corte, dias, valor, enviado}], mesDefault, perfilCompleto, faltan}` (igual que `resumenContrato_` del legacy; `enviado` = estadoTexto de la carga de ese mes o ''). `perfilCompleto` (bool) y `faltan` (etiquetas legibles: 'Dirección', 'Fecha de fin'...) salen de `faltanDelPerfil` (`src/server/perfil.ts`): el perfil está completo cuando dirección, teléfono, ciudad, cargo, n.º de contrato, objeto, inicio, fin, honorario mensual, valor total, nombre y cargo de quien revisa tienen algo (el correo y el equipo o línea son opcionales; el riesgo ARL siempre tiene valor). Para entrar basta con el honorario: si faltan las fechas, `meses:[]`, `mesDefault:''`, `inicio/fin:''` y la contratista las escribe en "Antes de empezar"; para enviar una cuenta sí hacen falta.
 

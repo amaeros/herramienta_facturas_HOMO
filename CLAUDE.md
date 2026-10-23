@@ -14,7 +14,7 @@ Escribe siempre en **español colombiano, casual**. El usuario es Jacobo.
 
 ## 2. Objetivo
 
-La contratista entra con **nombre + PIN** (los últimos 4 de su cédula), **sube el PDF de su planilla PILA desde el celular** y la app genera la cuenta de cobro (formato oficial HOMO **GJ-CO-FR-15 v02**) **en Excel (.xlsx)**, con lo precargado de su contrato más lo leído de la planilla. Las alertas **no bloquean**: la herramienta es un apoyo. **Solo Excel; PDF no por ahora.**
+La contratista entra con **nombre + PIN** (los últimos 4 de su cédula), **sube el PDF de su planilla PILA desde el celular** y la app genera la cuenta de cobro (formato oficial HOMO **GJ-CO-FR-15 v02**) **en Excel (.xlsx) y en PDF listo para imprimir**, con lo precargado de su contrato más lo leído de la planilla. Las alertas **no bloquean**: la herramienta es un apoyo. **El PDF (`src/lib/facturaPdf.ts`, `GET /api/factura/<id>?formato=pdf`) dibuja la misma hoja FACTURA en una página carta; el Excel sigue siendo el original.**
 
 ## 3. Reglas de negocio (confirmadas por Jacobo)
 

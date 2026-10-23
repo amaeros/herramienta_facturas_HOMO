@@ -633,5 +633,6 @@ export const apiAdmin = {
 
 /** Enlaces (descarga/ver archivo): los abre el navegador con la cookie de admin. */
 export const urlFactura = (cargaId: number) => `/api/factura/${cargaId}`;
+export const urlFacturaPdf = (cargaId: number) => `/api/factura/${cargaId}?formato=pdf`;
 export const urlPlanilla = (cargaId: number, n: number) => `/api/admin/planilla/${cargaId}?n=${n}`;
 export const urlDocumento = (documentoId: number) => `/api/admin/documentos/${documentoId}/archivo`;

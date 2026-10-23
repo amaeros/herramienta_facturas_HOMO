@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { alVencerSesion, AdminError, apiAdmin, MSG_SESION_ADMIN_VENCIDA, urlFactura, urlPlanilla } from "../apiAdmin";
+import { alVencerSesion, AdminError, apiAdmin, MSG_SESION_ADMIN_VENCIDA, urlFactura, urlFacturaPdf, urlPlanilla } from "../apiAdmin";
 
 function responder(status: number, cuerpo: unknown) {
   const fn = vi.fn(async () => new Response(JSON.stringify(cuerpo), { status, headers: { "Content-Type": "application/json" } }));
@@ -93,6 +93,7 @@ describe("cliente de la API de admin", () => {
 
   it("enlaces de descarga", () => {
     expect(urlFactura(12)).toBe("/api/factura/12");
+    expect(urlFacturaPdf(12)).toBe("/api/factura/12?formato=pdf");
     expect(urlPlanilla(12, 2)).toBe("/api/admin/planilla/12?n=2");
   });
 });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
-import { apiAdmin, textoError, urlFactura, urlPlanilla, type Carga } from "./apiAdmin";
+import { apiAdmin, textoError, urlFactura, urlFacturaPdf, urlPlanilla, type Carga } from "./apiAdmin";
 import { etiquetaEstado, etiquetaLectura, fmtFechaHora, fmtPct, mesAnterior, pesos, ultimosMeses } from "./helpers";
 import { useDatos, useMesActual, useMesPorDefecto } from "./useDatos";
 import { labelMes, pad2 } from "../formato";
@@ -109,6 +109,9 @@ function FilaCuenta({ c }: { c: Carga }) {
           <div className={css.enlaces}>
             <a className={`${css.btn} ${css.btnChico}`} href={urlFactura(c.id)} download>
               Descargar Excel
+            </a>
+            <a className={`${css.btn} ${css.btnChico}`} href={urlFacturaPdf(c.id)} download>
+              Descargar PDF
             </a>
             {c.tienePlanilla ? (
               <a className={css.enlace} href={urlPlanilla(c.id, 0)} target="_blank" rel="noopener noreferrer">
@@ -227,7 +230,7 @@ export default function Cuentas() {
         </button>
       </div>
       <p className={css.lead} style={{ margin: 0 }}>
-        Revisa lo que enviaron las trabajadoras, descarga su Excel y marca las que ya aprobaste.
+        Revisa lo que enviaron las trabajadoras, descarga su cuenta de cobro (PDF o Excel) y marca las que ya aprobaste.
       </p>
 
       {cargando && (

@@ -464,13 +464,20 @@ export function evaluate(inp: EvalInput): EvalResult {
   res.declarado = decl;
 
   if (cotValido && cotEnVig && (hayDesglose || soloTotal)) {
-    if (monthPartial(cot, c.inicio, c.fin)) {
-      res.parcial = true;
-      amarillos.push('La planilla es de ' + monthLabel(cot) + ', un mes parcial de tu contrato. No revisamos los valores; ' +
-        'tu supervisor revisará la planilla.');
-    } else {
+    {
       const riesgo = riskFor(c, cot);
-      const ss = expectedSS(c.honorario, riesgo, P);
+      // Mes parcial: como el HOMO, la SS esperada es la de los días del contrato en ese mes
+      // (IBC = 40 % del valor de esos días; el piso de 1 SMMLV también se prorratea).
+      let ss: SeguridadSocial | null;
+      if (monthPartial(cot, c.inicio, c.fin)) {
+        res.parcial = true;
+        const pc = expectedPeriod(cot, c.inicio, c.fin)!;
+        const dc = commercialDays(pc.inicio, pc.corte) as number;
+        ss = expectedSS(periodValue(c.honorario, dc), riesgo, Object.assign({}, P, { piso: P.piso * dc / 30 }));
+        if (ss) ss.desglose += ', proporcional a ' + dc + ' días de ' + monthLabel(cot);
+      } else {
+        ss = expectedSS(c.honorario, riesgo, P);
+      }
       if (!ss) {
         amarillos.push('No encuentro la tarifa de ARL para el riesgo «' + riesgo + '», así que no pudimos revisar los valores. Avisa a tu supervisor.');
       } else {

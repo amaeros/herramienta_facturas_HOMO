@@ -70,6 +70,8 @@ export type MesResumen = {
 
 export type Resumen = {
   nombre: string;
+  /** Su cédula, solo dígitos: el navegador la prueba como contraseña de la planilla (Enlace Operativo la protege así). */
+  cedula: string;
   numeroContrato: string;
   honorario: number;
   inicio: string;
@@ -233,6 +235,7 @@ export async function resumen(deps: Deps, c: ContratoFila): Promise<Resumen> {
   const faltan = faltanDelPerfil(c);
   return {
     nombre: c.nombre,
+    cedula: String(c.cedula ?? '').replace(/\D/g, ''),
     numeroContrato: c.numeroContrato,
     honorario: c.honorario as number,
     inicio: c.inicio ?? '',

@@ -29,8 +29,29 @@ export function unirItemsPdf(items: any[]): string {
   return out;
 }
 
-/** ArrayBuffer del PDF -> texto (hasta 10 páginas, separadas por línea en blanco). Nunca falla: si algo sale mal o pasan 15 s, devuelve ''. */
-export function extraerTextoPdf(pdfjsLib: any, arrayBuffer: ArrayBuffer): Promise<string> {
+/** Resultado de leer un PDF: el texto y si el PDF pedía contraseña (y ninguna de las claves sirvió). */
+export interface TextoPdf { texto: string; protegido: boolean }
+
+/**
+ * Como extraerTextoPdf, pero si el PDF tiene contraseña (Enlace Operativo protege la planilla detallada con la
+ * cédula) prueba las `claves` en orden. `protegido` = pedía clave y ninguna sirvió.
+ */
+export async function extraerTextoPdfConClave(pdfjsLib: any, arrayBuffer: ArrayBuffer, claves: string[] = []): Promise<TextoPdf> {
+  const intentos: Array<string | undefined> = [undefined];
+  for (const c of claves) if (c) intentos.push(c);
+  for (const clave of intentos) {
+    let pideClave = false;
+    const texto = await extraerTextoPdf(pdfjsLib, arrayBuffer, clave, () => { pideClave = true; });
+    if (!pideClave) return { texto, protegido: false };
+  }
+  return { texto: '', protegido: true };
+}
+
+/**
+ * ArrayBuffer del PDF -> texto (hasta 10 páginas, separadas por línea en blanco). Nunca falla: si algo sale mal o
+ * pasan 15 s, devuelve ''. Si el PDF tiene contraseña y `clave` no la abre, llama `alPedirClave` y devuelve ''.
+ */
+export function extraerTextoPdf(pdfjsLib: any, arrayBuffer: ArrayBuffer, clave?: string, alPedirClave?: () => void): Promise<string> {
   return new Promise<string>(function (resolve) {
     let terminado = false, doc: any = null, timer: any = null;
     function fin(texto?: unknown) {
@@ -43,7 +64,9 @@ export function extraerTextoPdf(pdfjsLib: any, arrayBuffer: ArrayBuffer): Promis
     timer = setTimeout(function () { fin(''); }, PDF_TIMEOUT_MS);
     try {
       if (typeof pdfjsLib === 'undefined' || !pdfjsLib || !pdfjsLib.getDocument) { fin(''); return; }
-      const tarea = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer.slice(0)), isEvalSupported: false, disableFontFace: true });
+      const opciones: any = { data: new Uint8Array(arrayBuffer.slice(0)), isEvalSupported: false, disableFontFace: true };
+      if (clave) opciones.password = clave;
+      const tarea = pdfjsLib.getDocument(opciones);
       tarea.promise.then(function (d: any) {
         doc = d;
         const total = Math.min(d.numPages, PDF_MAX_PAGINAS), paginas: string[] = [];
@@ -59,7 +82,10 @@ export function extraerTextoPdf(pdfjsLib: any, arrayBuffer: ArrayBuffer): Promis
           }).catch(function () { fin(''); });
         }
         pagina(1);
-      }).catch(function () { fin(''); });
+      }).catch(function (e: any) {
+        if (e && e.name === 'PasswordException' && alPedirClave) alPedirClave();
+        fin('');
+      });
     } catch { fin(''); }
   });
 }

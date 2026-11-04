@@ -307,9 +307,13 @@ function pp_parseOne(clean: string): PlanillaResultado {
   const isA = /liquidacion detallada de aportes|resumen general de pago|planilla resumen/.test(low) &&
     /datos generales de la liquidacion|resumen de pago/.test(low);
   const isB = /informacion de la planilla pagada|autoliquidacion consolidada|valor sin mora|detalle del aportante/.test(low);
+  const isC = /resumen planilla pagada/.test(low) || (/asopagos/.test(low) && /totales ibc/.test(low));
+  const isD = !isB && /reporte individual/.test(low) && /aporte por cada una de las administradoras|total aportes salud/.test(low);
 
   if (isA) { out.notas.push('formato: Aportes en Linea (resumen general de pago)'); pp_fmtA(ctx, out); }
   else if (isB) { pp_fmtB(ctx, out); }
+  else if (isC) { out.notas.push('formato: Asopagos (resumen planilla pagada)'); pp_fmtC(ctx, out); }
+  else if (isD) { out.notas.push('formato: Enlace Operativo (reporte individual)'); pp_fmtD(ctx, out); }
   else { ctx.generic = true; pp_fmtG(clean, flat, low, out); out.notas.push('formato de planilla no reconocido: lectura generica por palabras clave, verifique los valores'); }
 
   // Si el lector del formato no consiguio lo esencial, respaldo generico
@@ -343,6 +347,7 @@ function pp_classify(low: string): { tipo: TipoDocumento; p: number; c: number }
   p += 2 * has(/resumen general de pago|planilla resumen/);
   p += 3 * has(/autoliquidacion consolidada/);
   p += 3 * has(/informacion de la planilla pagada/);
+  p += 3 * has(/resumen planilla pagada/);
   p += 2 * has(/valor sin mora/);
   p += 2 * has(/datos generales del aportante/);
   p += 2 * has(/detalle del aportante/);
@@ -693,6 +698,195 @@ function pp_enlaceNumero(clean: string, flat: string): { numero: string | null; 
 function pp_esTelefono(digits: string, before: string): boolean {
   if (/^3[0-5]\d{8}$/.test(digits)) return true;
   return /(?:\btel|\btelefono|\bcelular|\bcel|\bmovil|\bwhatsapp|\bfax)\.?[:\s#-]*$/i.test(String(before || '').trim());
+}
+
+// ---------------------------------------------------------------------------
+// Formato C: Asopagos ("Resumen planilla pagada"). Los montos vienen SIN "$", asi que no sirve pp_amounts.
+// Trae una tabla "TOTALES IBC" (IBC pension / salud / riesgos / cajas / paraf): nunca confundir esos IBC
+// con los aportes. Con pdf.js el texto de este PDF sale DESORDENADO (las celdas no vienen por filas), asi
+// que primero se lee por aritmetica, sin depender del orden: el IBC es el monto cuyo 12,5 % y 16 %
+// (redondeados a la centena) tambien aparecen; la ARL es IBC x una tarifa oficial. Si eso no cuadra,
+// respaldo por filas (pp_fmtCFilas).
+// ---------------------------------------------------------------------------
+const PP_NUM_TOK = /^\d{1,3}(?:[.,]\d{3})+(?:,\d{1,2})?$|^\d+$/;
+
+function pp_ceil100(x: number): number { return Math.ceil(Math.round(x * 1e6) / 1e6 / 100) * 100; }
+
+function pp_fmtC(ctx: any, out: PlanillaResultado): void {
+  const flat: string = ctx.flat;
+
+  // n.º, periodo y tipo: fila ordenada ("2026-10 2026-10 38783023 I") o, si viene desordenado, por etiqueta
+  const m = flat.match(/(20\d\d) ?- ?(\d{1,2}) +(20\d\d) ?- ?(\d{1,2}) +(\d{8,12}) +([A-Z])\b/);
+  if (m && pp_periodoOk(m[1], m[2])) {
+    out.periodo = m[1] + '-' + pp_pad2(m[2]);
+    out.numero = m[5];
+    ctx.tipoPlanilla = m[6];
+    if (pp_periodoOk(m[3], m[4]) && (m[1] !== m[3] || Number(m[2]) !== Number(m[4]))) {
+      out.notas.push('periodo salud (' + m[3] + '-' + pp_pad2(m[4]) + ') distinto del de pension; se usa el de pension');
+    }
+  } else {
+    const pm = /PERIODO PENSION[\s\S]{0,160}?\b(20\d\d)-(\d{2})\b(?!-\d)/i.exec(flat);
+    if (pm && pp_periodoOk(pm[1], pm[2])) out.periodo = pm[1] + '-' + pm[2];
+    const nm = /\bPLANILLA\s+(\d{8,12})\b/.exec(flat) || /REF\. DE PAGO \(PIN\)\s+(\d{8,12})\b/i.exec(flat);
+    if (nm) out.numero = nm[1];
+  }
+
+  const near = pp_porIbc(ctx, out);
+  if (!near) { pp_fmtCFilas(ctx, out); return; }
+  // caja: los independientes casi nunca la pagan; si aparece la administradora CCF, 2 % del IBC
+  out.ccf = /\bCCF\s*\(\s*Administradoras?/i.test(flat) ? near(pp_ceil100(0.02 * (out.ibc as number))) : 0;
+
+  // total a pagar: el mayor monto junto a "Gran Total" (o el de "VALOR PAGO"); mora = total - aportes
+  const gt = /Gran Total/i.exec(flat);
+  const gnum = gt ? pp_numsAfter(flat, gt.index + gt[0].length, 8) : [];
+  let total: number | null = gnum.length ? Math.max.apply(null, gnum.map(function (x) { return x.v; })) : null;
+  if (!total) {
+    const vp = /VALOR PAGO\s+(\d{1,3}(?:\.\d{3})+)\b/i.exec(flat);
+    total = vp ? pp_num(vp[1]) : null;
+  }
+  if (total) {
+    out.total = total;
+    const liq = (out.salud || 0) + (out.pension || 0) + (out.arl || 0) + (out.ccf || 0);
+    if (total >= liq) out.mora = total - liq;
+    else ctx.checks.push('el total a pagar (' + total + ') es menor que la suma de aportes (' + liq + ')');
+  }
+  if (ctx.tipoPlanilla === 'N') pp_notaCorreccion(out);
+}
+
+/**
+ * Lectura por aritmetica, sin depender del orden del texto: el IBC es el monto cuyo 12,5 % y 16 % (redondeados a la
+ * centena) tambien aparecen en el documento; la ARL es IBC x una tarifa oficial (primero la impresa, "2,436 %" o
+ * "0,00522"). Llena ibc, salud, pension, arl y tarifaArl. Devuelve la funcion `near` (monto del documento a +-100 de
+ * x) o null si no encontro un IBC que cuadre.
+ */
+function pp_porIbc(ctx: any, out: PlanillaResultado): ((x: number) => number | null) | null {
+  const flat: string = ctx.flat;
+  // todos los montos con separador de miles ("546.400", "$ 546.400"), con cuantas veces aparece cada uno
+  const freq = new Map<number, number>();
+  const reA = /(?<![\d.,])(\d{1,3}(?:\.\d{3})+)(?![\d]|[.,]\d)/g;
+  let a: RegExpExecArray | null;
+  while ((a = reA.exec(flat)) !== null) { const v = pp_num(a[1]); if (v !== null) freq.set(v, (freq.get(v) || 0) + 1); }
+  function near(x: number): number | null {
+    let best: number | null = null;
+    freq.forEach(function (_n, v) { if (Math.abs(v - x) <= 100 && (best === null || Math.abs(v - x) < Math.abs(best - x))) best = v; });
+    return best;
+  }
+  const cands = Array.from(freq.keys()).filter(function (v) { return v >= 100000; })
+    .sort(function (x, y) { return (freq.get(y)! - freq.get(x)!) || (y - x); });
+  let ibc: number | null = null, salud: number | null = null, pension: number | null = null;
+  for (let i = 0; i < cands.length && ibc === null; i++) {
+    const s = near(pp_ceil100(0.125 * cands[i])), p = near(pp_ceil100(0.16 * cands[i]));
+    if (s !== null && p !== null && s !== p) { ibc = cands[i]; salud = s; pension = p; }
+  }
+  if (ibc === null) return null;
+  out.ibc = ibc; out.salud = salud; out.pension = pension;
+
+  const tarifas = PP_TARIFAS_PCT.slice();
+  const tp = /(?<![\d.,])0[.,]0(0522|1044|2436|435|696)0?(?![\d])/.exec(flat);
+  const impresa = tp ? Number('0.0' + tp[1]) * 100 : (pp_tarifa(flat) !== null ? (pp_tarifa(flat) as number) * 100 : null);
+  if (impresa !== null) tarifas.sort(function (x, y) { return Math.abs(x - impresa) - Math.abs(y - impresa); });
+  for (let i = 0; i < tarifas.length && out.arl === null; i++) {
+    const v = near(pp_ceil100(ibc * tarifas[i] / 100));
+    if (v !== null && v !== salud && v !== pension) { out.arl = v; out.tarifaArl = Math.round(tarifas[i] * 1000) / 100000; }
+  }
+  if (out.arl === null) ctx.checks.push('no se encontro el aporte de ARL para el IBC ' + ibc);
+  return near;
+}
+
+// ---------------------------------------------------------------------------
+// Formato D: Enlace Operativo / SuAporte "Reporte individual" (planilla detallada de un afiliado). Con pdf.js el
+// texto sale desordenado; los montos se leen por aritmetica (pp_porIbc).
+// ---------------------------------------------------------------------------
+function pp_fmtD(ctx: any, out: PlanillaResultado): void {
+  const flat: string = ctx.flat;
+  // "... I 88775145 Tipo Planilla 202610 202610" = tipo, n.º, periodo cotizacion, periodo servicio
+  const m = /\b([A-Z])\s+(\d{7,12})\s+Tipo Planilla\s+(20\d\d)(0[1-9]|1[0-2])\b(?:\s+(20\d\d)(0[1-9]|1[0-2])\b)?/.exec(flat);
+  if (m) {
+    ctx.tipoPlanilla = m[1];
+    out.numero = m[2];
+    out.periodo = m[3] + '-' + m[4];
+  } else {
+    const nm = /Numero Planilla\s*:?\s*(\d{7,12})\b/i.exec(flat) || /\b(\d{7,12})\s+Tipo Planilla\b/.exec(flat);
+    if (nm) out.numero = nm[1];
+    const pm = /Periodo Cotizacion\s*:?\s*(20\d\d)-?(0[1-9]|1[0-2])\b/i.exec(flat) || /\b(20\d\d)(0[1-9]|1[0-2])\s+\1\2\b/.exec(flat);
+    if (pm) out.periodo = pm[1] + '-' + pm[2];
+  }
+  const near = pp_porIbc(ctx, out);
+  if (!near) { ctx.checks.push('no se pudo cuadrar el IBC con los aportes'); return; }
+  out.ccf = /NINGUNA CCF/i.test(flat) ? 0 : near(pp_ceil100(0.02 * (out.ibc as number))) || 0;
+  // total final = suma de aportes si aparece en el documento (entonces no hay mora)
+  const liq = (out.salud || 0) + (out.pension || 0) + (out.arl || 0) + (out.ccf || 0);
+  if (near(liq) === liq) { out.total = liq; out.mora = 0; }
+  if (ctx.tipoPlanilla === 'N') pp_notaCorreccion(out);
+}
+
+// Montos seguidos (solo numeros) desde pos; se corta en la primera palabra
+function pp_numsAfter(flat: string, pos: number, max: number): Array<{ v: number; sep: boolean }> {
+  const toks = flat.substring(pos).trim().split(' ');
+  const res: Array<{ v: number; sep: boolean }> = [];
+  for (let i = 0; i < toks.length && res.length < max; i++) {
+    if (!PP_NUM_TOK.test(toks[i])) break;
+    const v = pp_num(toks[i]);
+    if (v === null) break;
+    res.push({ v: v, sep: /[.,]/.test(toks[i]) });
+  }
+  return res;
+}
+
+// Respaldo de Asopagos: lectura por filas (solo sirve si el texto viene en orden). Siempre confianza media.
+function pp_fmtCFilas(ctx: any, out: PlanillaResultado): void {
+  const flat: string = ctx.flat;
+  ctx.checks.push('no se pudo cuadrar el IBC con los aportes; lectura por filas');
+
+  // Resumen por subsistema: "AFP(Administradoras: 1) <afiliados> <liquidado> <upc> <mora> <saldos> <a pagar>"
+  const sums: Record<'pension' | 'salud' | 'arl' | 'ccf', number | null> = { pension: null, salud: null, arl: null, ccf: null };
+  let mora = 0, secFound = false;
+  const reSec = /\b(AFP|EPS|ARP|ARL|CCF)\s*\(\s*Administradoras?\s*:?\s*\d+\s*\)/gi;
+  let s: RegExpExecArray | null;
+  while ((s = reSec.exec(flat)) !== null) {
+    let nums = pp_numsAfter(flat, s.index + s[0].length, 7);
+    // el primer numero es el n.º de afiliados (entero pequeno, sin separador de miles)
+    if (nums.length >= 2 && !nums[0].sep && nums[0].v < 1000) nums = nums.slice(1);
+    if (!nums.length) continue;
+    const k = s[1].toUpperCase();
+    const key = k === 'AFP' ? 'pension' : k === 'EPS' ? 'salud' : k === 'CCF' ? 'ccf' : 'arl';
+    sums[key] = (sums[key] || 0) + nums[0].v;
+    if (nums.length >= 3) mora += nums[2].v;
+    secFound = true;
+  }
+  out.pension = sums.pension; out.salud = sums.salud; out.arl = sums.arl;
+  out.ccf = sums.ccf !== null ? sums.ccf : (secFound ? 0 : null);
+
+  // Gran Total: <liquidado> <upc> <mora> <saldos> <a pagar>
+  const gt = /Gran Total/i.exec(flat);
+  const gnum = gt ? pp_numsAfter(flat, gt.index + gt[0].length, 5) : [];
+  if (gnum.length >= 5) { out.total = gnum[4].v; out.mora = gnum[2].v; }
+  else if (secFound) {
+    out.mora = mora;
+    const vp = flat.match(/VALOR PAGO[\s\S]{0,400}?(\d{1,3}(?:[.,]\d{3})+)/i);
+    if (vp) out.total = pp_num(vp[1]);
+  }
+  if (gnum.length >= 1 && secFound) {
+    const liq = (out.pension || 0) + (out.salud || 0) + (out.arl || 0) + (out.ccf || 0);
+    if (Math.abs(liq - gnum[0].v) > 1) ctx.checks.push('la suma por subsistema (' + liq + ') no coincide con el gran total liquidado (' + gnum[0].v + ')');
+  }
+
+  // IBC: primer monto con separador de miles despues de "TOTALES IBC"
+  const ti = /TOTALES IBC/i.exec(flat);
+  if (ti) {
+    const im = flat.substring(ti.index, ti.index + 300).match(/\b(\d{1,3}(?:[.,]\d{3})+)\b/);
+    if (im) out.ibc = pp_num(im[1]);
+  }
+
+  // Tarifa ARL: no viene impresa; se deduce de ARL / IBC si cuadra con una tarifa oficial
+  out.tarifaArl = pp_tarifa(flat);
+  if (out.tarifaArl === null && out.ibc && out.arl) {
+    for (let i = 0; i < PP_TARIFAS_PCT.length; i++) {
+      const t = PP_TARIFAS_PCT[i] / 100;
+      if (Math.abs(Math.ceil(out.ibc * t / 100) * 100 - out.arl) <= 100) { out.tarifaArl = Math.round(PP_TARIFAS_PCT[i] * 1000) / 100000; break; }
+    }
+  }
+  if (ctx.tipoPlanilla === 'N') pp_notaCorreccion(out);
 }
 
 function pp_tarifa(flat: string): number | null {

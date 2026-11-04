@@ -1,6 +1,6 @@
 /** Preparación de archivos en el navegador: validación, compresión de fotos y texto del PDF (pdf.js, sin OCR). */
 
-import { extraerTextoPdf } from "../lib/pdfText";
+import { extraerTextoPdfConClave, type TextoPdf } from "../lib/pdfText";
 
 /** Límite por archivo que acepta el servidor (el cuerpo de una función de Vercel admite ~4,5 MB). */
 export const MAX_BYTES = 4 * 1024 * 1024;
@@ -90,12 +90,17 @@ function leerBuffer(file: Blob): Promise<ArrayBuffer> {
 
 /** Texto real del PDF; '' si pdf.js no cargó, el PDF es una imagen escaneada o algo falla (el servidor devuelve fuente 'ninguna'). */
 export async function textoDelPdf(file: Blob): Promise<string> {
+  return (await textoDelPdfConClave(file, [])).texto;
+}
+
+/** Como textoDelPdf, pero si el PDF tiene contraseña prueba las `claves` (la cédula). `protegido` = ninguna sirvió. */
+export async function textoDelPdfConClave(file: Blob, claves: string[]): Promise<TextoPdf> {
   try {
     const lib = await cargarPdfjs();
-    if (!lib) return "";
-    return await extraerTextoPdf(lib, await leerBuffer(file));
+    if (!lib) return { texto: "", protegido: false };
+    return await extraerTextoPdfConClave(lib, await leerBuffer(file), claves);
   } catch {
-    return "";
+    return { texto: "", protegido: false };
   }
 }
 
@@ -142,14 +147,16 @@ export function comprimirImagen(file: File): Promise<File> {
 export interface ArchivoListo {
   archivo: File;
   texto: string;
+  /** El PDF tiene contraseña y no se pudo abrir con las claves probadas. */
+  protegido: boolean;
 }
 
-/** PDF: el mismo archivo + el texto real (pdf.js). Foto: la foto reducida, sin texto. */
-export async function prepararArchivo(file: File): Promise<ArchivoListo> {
+/** PDF: el mismo archivo + el texto real (pdf.js; si tiene clave, prueba `claves`). Foto: la foto reducida, sin texto. */
+export async function prepararArchivo(file: File, claves: string[] = []): Promise<ArchivoListo> {
   if (esPdf(file)) {
-    return { archivo: file, texto: await textoDelPdf(file) };
+    return { archivo: file, ...(await textoDelPdfConClave(file, claves)) };
   }
   const reducida = await comprimirImagen(file);
   if (reducida.size > MAX_BYTES) throw new Error(MSG_PESO);
-  return { archivo: reducida, texto: "" };
+  return { archivo: reducida, texto: "", protegido: false };
 }

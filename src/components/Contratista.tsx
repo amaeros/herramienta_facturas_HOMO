@@ -26,6 +26,7 @@ import type {
 type Pantalla = "login" | "registro" | "perfil" | "datos" | "contrato" | "cargando" | "verificar" | "final";
 
 const NOTA_NO_LEYO = "No pudimos leer tu planilla con seguridad. Escribe estos datos como aparecen en tu planilla.";
+const NOTA_CON_CLAVE = "Tu planilla tiene contraseña y no pudimos abrirla con tu cédula. Escribe estos datos como aparecen en tu planilla, o sube la planilla resumida.";
 
 export default function Contratista() {
   const [pantalla, setPantalla] = useState<Pantalla>("login");
@@ -206,9 +207,9 @@ export default function Contratista() {
     return lista.map((a) => ({ numero: a.numero, periodo: a.periodo, valor: a.valor, tempId: a.tempId || "" }));
   }
 
-  /** Manda el archivo a /api/planilla (multipart) con el texto que sacó pdf.js. */
-  async function subirPlanilla(file: File, esAdicional: boolean): Promise<RespPlanilla> {
-    const listo = await prepararArchivo(file);
+  /** Manda el archivo a /api/planilla (multipart) con el texto que sacó pdf.js (si el PDF tiene clave, prueba la cédula). */
+  async function subirPlanilla(file: File, esAdicional: boolean): Promise<RespPlanilla & { protegido: boolean }> {
+    const listo = await prepararArchivo(file, contrato?.cedula ? [contrato.cedula] : []);
     const f = fechasActuales();
     const fd = new FormData();
     fd.append("archivo", listo.archivo, listo.archivo.name);
@@ -219,7 +220,8 @@ export default function Contratista() {
     fd.append("adicionales", JSON.stringify(esAdicional ? [] : adicionalesPayload()));
     fd.append("diasManual", JSON.stringify(esAdicional ? null : diasManualActual()));
     if (esAdicional) fd.append("adicional", "1");
-    return api<RespPlanilla>("/api/planilla", { method: "POST", body: fd });
+    const r = await api<RespPlanilla>("/api/planilla", { method: "POST", body: fd });
+    return { ...r, protegido: listo.protegido };
   }
 
   async function alElegirArchivo(file: File) {
@@ -245,7 +247,7 @@ export default function Contratista() {
       setEvaluando(false);
       setInputs(nuevos);
       setEdicion(!r.leyo || faltaAlgo(d));
-      setNota(r.leyo ? "" : NOTA_NO_LEYO);
+      setNota(r.leyo ? "" : r.protegido ? NOTA_CON_CLAVE : NOTA_NO_LEYO);
       mostrar("verificar");
     } catch (e) {
       if (esSesionVencida(e)) return;

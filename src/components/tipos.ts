@@ -15,6 +15,8 @@ export interface MesInfo {
 
 export interface Resumen {
   nombre: string;
+  /** Solo dígitos. Se prueba como contraseña de la planilla en PDF. */
+  cedula: string;
   numeroContrato: string;
   honorario: number;
   inicio: string;

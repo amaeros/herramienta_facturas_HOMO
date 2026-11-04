@@ -184,11 +184,24 @@ eq('Marzo con corte 31: 30 dias y valor completo; queda REVISAR (fecha distinta 
 // mes parcial
 r = ev(LAURA, '2026-01', { numero: '83358879', mesCotizado: '2026-01', salud: 218900, pension: 280200, arl: 9200 });
 eq('Laura enero (mes parcial): REVISAR, 15 dias, 3.587.000', [r.estado, r.dias, r.valor], ['REVISAR', 15, 3587000]);
-cierto('Mensaje de mes parcial', /tu supervisor revisará la planilla/.test(r.mensaje), r.mensaje);
+// enero parcial (15 dias): IBC = 40 % de 3.587.000 = 1.434.800 -> 179.400 + 229.600 + ARL I 7.500; cotizo mas = 🟡
+eq('Laura enero: SS esperada proporcional a 15 dias', [r.parcial, r.ss && r.ss.total], [true, 179400 + 229600 + 7500]);
+cierto('Mensaje de mes parcial (cotizo mas)', /más de los \$416\.500/.test(r.mensaje), r.mensaje);
 r = ev(LAURA, '2026-02', { numero: '83365278', mesCotizado: '2026-01', salud: 218900, pension: 280200, arl: 9200 });
-eq('Laura febrero con planilla de enero (parcial): REVISAR, sin validar montos', r.estado, 'REVISAR');
+eq('Laura febrero con planilla de enero (parcial, cotizo mas): REVISAR', r.estado, 'REVISAR');
+r = ev(LAURA, '2026-01', { numero: '83358879', mesCotizado: '2026-01', salud: 179400, pension: 229600, arl: 7500 });
+eq('Laura enero con lo justo proporcional: OK', r.estado, 'OK');
 r = ev(ERIKA, '2026-01', { numero: '83358880', mesCotizado: '2026-01', salud: 1, pension: 1, arl: 1 });
-eq('Mes parcial: montos absurdos NO se validan (REVISAR)', r.estado, 'REVISAR');
+eq('Mes parcial: montos absurdos ahora SI se validan (ERROR, no bloquea)', [r.estado, r.bloquea], ['ERROR', false]);
+// Valeria (caso real oct. 2026): contrato 08/10-30/11, 8.440.000, riesgo III -> octubre 23 dias = 6.470.667.
+// El Excel del HOMO espera 800.706 (sin redondear); la app redondea cada aporte a la centena: 800.900.
+const VALERIA: any = { inicio: '2026-10-08', fin: '2026-11-30', honorario: 8440000, total: 15473333, riesgo: 'III', riesgoNuevo: '', desde: '' };
+r = ev(VALERIA, '2026-10', { numero: '38783023', mesCotizado: '2026-10', salud: 426900, pension: 546400, arl: 17900 });
+eq('Valeria oct: SS esperada 323.600 + 414.200 + 63.100', r.ss && [r.ss.salud, r.ss.pension, r.ss.arl, r.ss.total], [323600, 414200, 63100, 800900]);
+eq('Valeria oct: ARL en riesgo I (17.900) = 🔴, igual se genera', [r.estado, r.bloquea], ['ERROR', false]);
+cierto('Valeria oct: el mensaje senala la ARL', /ARL \(cotizaste \$17\.900, debe ser \$63\.100\)/.test(r.mensaje), r.mensaje);
+r = ev(VALERIA, '2026-10', { numero: '38783023', mesCotizado: '2026-10', salud: 3414569, pension: 3414569, arl: 3414569 });
+eq('Valeria oct con los IBC leidos como aportes: 🟡 cotizo mas (ya no pasa sin revisar)', r.estado, 'REVISAR');
 
 
 section('v3: las alertas nunca bloquean; cotizacion mayor / menor');
